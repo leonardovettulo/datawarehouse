@@ -8,6 +8,7 @@ from dagster import (
     define_asset_job,
     materialize,
 )
+import httpx
 
 daily_partitions = DailyPartitionsDefinition(start_date="2025-01-01")
 
@@ -19,8 +20,42 @@ def hello_world(context: AssetExecutionContext) -> MaterializeResult:
     context.log.info(message)
     return MaterializeResult(metadata={"message": message, "partition": partition_key})
 
+@asset(partitions_def=daily_partitions, description="Example asset — replace with real pipelines.")
+def hello_world_2(context: AssetExecutionContext) -> MaterializeResult:
+    partition_key = context.partition_key
+    message = f"Hello from partition {partition_key}"
+    context.log.info(message)
+    return MaterializeResult(metadata={"message": message, "partition": partition_key})
+
+
+@asset(description="Second asset to verify reload works.")
+def goodbye_world(context: AssetExecutionContext) -> MaterializeResult:
+    message = "Goodbye — deployed after reload"
+    context.log.info(message)
+    return MaterializeResult(metadata={"message": message})
+
+
+@asset(description="Third asset — simple health check.")
+def health_check(context: AssetExecutionContext) -> MaterializeResult:
+    status = "ok"
+    context.log.info("health_check: %s", status)
+    return MaterializeResult(metadata={"status": status})
+
+
+@asset(description="HTTP reachability check using httpx.")
+def http_ping(context: AssetExecutionContext) -> MaterializeResult:
+    url = "https://httpbin.org/get"
+    response = httpx.get(url, timeout=10.0)
+    response.raise_for_status()
+    context.log.info("GET %s -> %s", url, response.status_code)
+    return MaterializeResult(metadata={"url": url, "status_code": response.status_code})
+
 
 hello_job = define_asset_job("hello_job", selection=[hello_world])
+hello_job_2 = define_asset_job("hello_job_2", selection=[hello_world_2])
+goodbye_job = define_asset_job("goodbye_job", selection=[goodbye_world])
+health_check_job = define_asset_job("health_check_job", selection=[health_check])
+http_ping_job = define_asset_job("http_ping_job", selection=[http_ping])
 
 daily_hello_schedule = ScheduleDefinition(
     job=hello_job,
@@ -30,8 +65,8 @@ daily_hello_schedule = ScheduleDefinition(
 
 
 defs = Definitions(
-    assets=[hello_world],
-    jobs=[hello_job],
+    assets=[hello_world, goodbye_world, health_check, http_ping, hello_world_2],
+    jobs=[hello_job, goodbye_job, health_check_job, http_ping_job, hello_job_2],
     schedules=[daily_hello_schedule],
 )
 

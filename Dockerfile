@@ -10,9 +10,13 @@ ENV DAGSTER_HOME=/opt/dagster/dagster_home
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Layer 1: install dependencies (cached until pyproject.toml changes)
 COPY pyproject.toml ./
+RUN mkdir -p my_pipelines && touch my_pipelines/__init__.py \
+    && pip install --no-cache-dir -e .
+
+# Layer 2: swap in real pipeline code (fast rebuild on code-only changes)
 COPY my_pipelines ./my_pipelines
-RUN pip install --no-cache-dir .
 
 COPY dagster/dagster.yaml "${DAGSTER_HOME}/dagster.yaml"
 COPY workspace.yaml ./workspace.yaml
