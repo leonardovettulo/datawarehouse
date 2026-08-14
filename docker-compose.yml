@@ -42,7 +42,6 @@ services:
         condition: service_healthy
 
   dagster-daemon:
-    build: .
     image: dagsteross:latest
     restart: unless-stopped
     command:

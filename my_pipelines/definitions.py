@@ -9,6 +9,7 @@ from dagster import (
     materialize,
 )
 import httpx
+import humanize
 
 daily_partitions = DailyPartitionsDefinition(start_date="2025-01-01")
 
@@ -38,8 +39,11 @@ def goodbye_world(context: AssetExecutionContext) -> MaterializeResult:
 @asset(description="Third asset — simple health check.")
 def health_check(context: AssetExecutionContext) -> MaterializeResult:
     status = "ok"
-    context.log.info("health_check: %s", status)
-    return MaterializeResult(metadata={"status": status})
+    payload_bytes = 1_048_576
+    context.log.info("health_check: %s (%s)", status, humanize.naturalsize(payload_bytes))
+    return MaterializeResult(
+        metadata={"status": status, "payload": humanize.naturalsize(payload_bytes)}
+    )
 
 
 @asset(description="HTTP reachability check using httpx.")

@@ -1,19 +1,25 @@
+# syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 WORKDIR /opt/dagster/app
 
 ENV DAGSTER_HOME=/opt/dagster/dagster_home
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
 # Layer 1: install dependencies (cached until pyproject.toml changes)
 COPY pyproject.toml ./
-RUN mkdir -p my_pipelines && touch my_pipelines/__init__.py \
-    && pip install --no-cache-dir -e .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    mkdir -p my_pipelines && touch my_pipelines/__init__.py \
+    && uv pip install --system -e .
 
 # Layer 2: swap in real pipeline code (fast rebuild on code-only changes)
 COPY my_pipelines ./my_pipelines

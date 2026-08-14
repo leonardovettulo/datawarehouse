@@ -23,8 +23,15 @@ Both webserver and daemon import the module in-process. Deploying new code means
 
 ```bash
 cp .env.example .env          # edit POSTGRES_PASSWORD if you like
-make up                       # build + start
-open http://localhost:3000    # Dagster UI
+make up-build                 # first time: build + start
+open http://localhost:3000    # Dagster UI (wait ~30s for migrations)
+```
+
+After the first build, day-to-day:
+
+```bash
+make up                       # start without rebuilding
+make up-build                 # rebuild after code or dependency changes
 ```
 
 Smoke test:
@@ -45,7 +52,7 @@ Same compose file works on a VPS. Typical flow:
 
 1. Clone this repo on the server.
 2. Set strong values in `.env` (especially `POSTGRES_PASSWORD`).
-3. `docker compose up -d --build`
+3. `make up-build`
 4. Put nginx or Caddy in front with basic auth or OAuth — Dagster OSS has no built-in auth.
 
 To ship new pipeline code:
@@ -76,7 +83,7 @@ docker compose build
 docker compose up -d
 ```
 
-Pre-installed: `dagster`, `dagster-dbt`, `dlt`, `clickhouse-connect`.
+Pre-installed: `dagster`, `dlt`, `clickhouse-connect`, `httpx`.
 
 ## Local dev without Docker
 
