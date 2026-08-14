@@ -1,13 +1,16 @@
-.PHONY: up down build logs migrate shell test-local
+.PHONY: up up-build down build logs migrate shell test-local
 
-up: ## Start Postgres + webserver + daemon
+up: ## Start services (no rebuild — use after first build)
+	docker compose up -d
+
+up-build: ## Rebuild image and start (use after pyproject.toml changes)
 	docker compose up -d --build
 
 down: ## Stop and remove containers (keeps Postgres volume)
 	docker compose down
 
-build: ## Build the Dagster image
-	docker compose build
+build: ## Build the Dagster image once
+	docker compose build dagster-webserver
 
 logs: ## Follow all service logs
 	docker compose logs -f
