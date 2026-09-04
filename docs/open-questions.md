@@ -22,8 +22,3 @@ From the implementation plan. Update answers here; do not bury them in chat.
 | 9 | Internal CA cert or self-signed? | _open_ |
 | 10 | How many Metabase users, which areas? | _open_ |
 
-## Legal
-
-| # | Question | Answer |
-|---|---|---|
-| 11 | Does the warehouse copy inherit Ley 26.529 HC retention? 25.326 also forbids keeping sensitive data longer than the purpose requires. | _open_ — sets backup retention and whether we can prune |
