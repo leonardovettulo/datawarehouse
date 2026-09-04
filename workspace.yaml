@@ -1,2 +1,2 @@
 load_from:
-  - python_module: my_pipelines.definitions
+  - python_module: etl.definitions
