@@ -1,0 +1,5 @@
+<clickhouse>
+    <!-- Local cap. Production: 50–60% of host RAM and a compose mem_limit. -->
+    <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
+    <max_concurrent_queries>20</max_concurrent_queries>
+</clickhouse>

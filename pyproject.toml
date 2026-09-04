@@ -1,16 +1,15 @@
 [project]
 name = "dagsteross"
 version = "0.1.0"
-description = "Simple single-box Dagster OSS deployment"
+description = "On-prem DW: Dagster orchestration against ClickHouse, Metabase serving"
 requires-python = ">=3.11"
 dependencies = [
     "dagster>=1.9,<2",
     "dagster-webserver>=1.9,<2",
     "dagster-postgres>=0.25,<0.26",
-    "dlt[postgres]>=1.0",
     "clickhouse-connect>=0.8",
-    "httpx>=0.27",
-    "humanize>=4.0",
+    "psycopg[binary]>=3.2",
+    "pyarrow>=17",
 ]
 
 [build-system]
@@ -19,4 +18,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["my_pipelines*"]
+include = ["etl*"]

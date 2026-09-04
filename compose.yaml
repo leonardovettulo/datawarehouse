@@ -1,0 +1,73 @@
+# Orchestration stack: redeployed often. Merged with platform/compose.yaml via `make up`.
+# Production: own project (`dw-orchestration`) on the external dw_net; bind-mount etl/.
+
+name: dw-local
+
+services:
+  dagster-webserver:
+    build: .
+    image: dw-orchestration:local
+    restart: unless-stopped
+    command:
+      - dagster-webserver
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - -w
+      - workspace.yaml
+    ports:
+      - "127.0.0.1:3030:3000"
+    environment: &dagster_env
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: ${PG_DAGSTER_PASSWORD:?}
+      DAGSTER_POSTGRES_DB: dagster
+      DAGSTER_POSTGRES_HOST: postgres
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: dagster
+      CH_DAGSTER_PASSWORD: ${CH_DAGSTER_PASSWORD:?}
+      SOURCE_PG_HOST: postgres
+      SOURCE_PG_PORT: "5432"
+      SOURCE_PG_DB: source
+      SOURCE_PG_USER: source_reader
+      PG_SOURCE_PASSWORD: ${PG_SOURCE_PASSWORD:?}
+      ARCHIVE_ROOT: /srv/dw/archive
+      PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:?}
+    volumes:
+      - archive_data:/srv/dw/archive
+    networks: [dw_net]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+  dagster-daemon:
+    image: dw-orchestration:local
+    restart: unless-stopped
+    command:
+      - dagster-daemon
+      - run
+    environment: *dagster_env
+    volumes:
+      - archive_data:/srv/dw/archive
+    networks: [dw_net]
+    healthcheck:
+      test: ["CMD", "dagster-daemon", "liveness-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+networks:
+  dw_net:
+    name: dw_net
+
+volumes:
+  archive_data:

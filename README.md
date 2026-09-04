@@ -1,120 +1,86 @@
-# dagsteross
+# On-prem data warehouse
 
-Single-box [Dagster OSS](https://docs.dagster.io/) deployment: Postgres + webserver + daemon, one Docker image, in-process code loading. No gRPC code servers, no Docker-in-Docker run launcher.
+Local ClickHouse warehouse, Dagster orchestration, Metabase serving. The source is a seeded Postgres database that stands in for the SQL Server read-only replica.
 
-## What's in the box
-
-| Service | Role |
-|---------|------|
-| `postgres` | Run, schedule, and event log storage |
-| `dagster-webserver` | UI at port 3000 |
-| `dagster-daemon` | Schedules, sensors, queued run execution |
-
-Pipeline code lives in `my_pipelines/definitions.py` and is loaded via `workspace.yaml`:
-
-```yaml
-load_from:
-  - python_module: my_pipelines.definitions
-```
-
-Both webserver and daemon import the module in-process. Deploying new code means rebuilding the image and restarting those two containers.
-
-## Quick start (local)
+## Quick start
 
 ```bash
-cp .env.example .env          # edit POSTGRES_PASSWORD if you like
-make up-build                 # first time: build + start
-open http://localhost:3000    # Dagster UI (wait ~30s for migrations)
+cp .env.example .env          # already done if you just cloned this tree
+make bootstrap                # build, start, ingest, set up Metabase, verify
 ```
 
-After the first build, day-to-day:
+Then open:
+
+| Surface | URL | Notes |
+|---|---|---|
+| Metabase | http://127.0.0.1:3000 | `admin@localhost.local` / `LocalDev123456` |
+| Dagster | http://127.0.0.1:3030 | No auth; local only |
+| ClickHouse HTTP | http://127.0.0.1:8123 | User `default`, password from `.env` |
+
+Day to day after the first bootstrap:
 
 ```bash
 make up                       # start without rebuilding
-make up-build                 # rebuild after code or dependency changes
-```
-
-Smoke test:
-
-```bash
-make test-local
-```
-
-Stop:
-
-```bash
+make pipeline                 # re-run extracts + marts (no-op if no new source rows)
+make verify
 make down
 ```
 
-## Server deploy
+If you change `pyproject.toml` or the Dockerfile: `make up-build`.
 
-Same compose file works on a VPS. Typical flow:
+If you change only Python under `etl/`: `make up-build` (code is copied into the image; Docker Desktop here cannot bind-mount the repo).
 
-1. Clone this repo on the server.
-2. Set strong values in `.env` (especially `POSTGRES_PASSWORD`).
-3. `make up-build`
-4. Put nginx or Caddy in front with basic auth or OAuth — Dagster OSS has no built-in auth.
+Wipe everything local and start again: `make reset && make bootstrap`.
 
-To ship new pipeline code:
-
-```bash
-git pull
-docker compose up -d --build dagster-webserver dagster-daemon
-```
-
-## Configuration
-
-**`dagster/dagster.yaml`** — instance config mounted at `DAGSTER_HOME`:
-
-- Postgres storage (env-var credentials)
-- `QueuedRunCoordinator` with `max_concurrent_runs: 2` — caps subprocess runs on the host
-- Default run launcher (no separate container per run)
-- Schedule/sensor tick retention (30 / 7 days)
-- Telemetry off
-
-**`.env`** — Postgres credentials and UI port.
-
-## Adding dependencies
-
-Edit `pyproject.toml`, rebuild:
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-Pre-installed: `dagster`, `dlt`, `clickhouse-connect`, `httpx`.
-
-## Local dev without Docker
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-export DAGSTER_HOME=$(pwd)/dagster   # uses local dagster.yaml; needs a Postgres reachable at hostname `postgres` or edit dagster.yaml
-dagster dev -m my_pipelines.definitions
-```
-
-For pure local iteration, point `dagster/dagster.yaml` storage at a local Postgres or use Dagster's default SQLite by temporarily removing the postgres block.
-
-## Operations notes
-
-| Topic | Behavior |
-|-------|----------|
-| Hot reload | None — restart webserver + daemon after code changes |
-| Daemon health | `restart: unless-stopped` + `dagster-daemon liveness-check` |
-| Run history | Not auto-purged in OSS; plan periodic cleanup if volume grows |
-| Upgrades | After bumping Dagster in `pyproject.toml`, run `make migrate` before or during rollout |
-| Auth | Add a reverse proxy; not included here |
-
-## Project layout
+## What runs
 
 ```
-.
-├── dagster/dagster.yaml    # instance config
-├── my_pipelines/           # your code (edit definitions.py)
-├── workspace.yaml          # in-process module loader
-├── Dockerfile              # single image for webserver + daemon
-├── docker-compose.yml
-├── scripts/entrypoint.sh   # wait for Postgres, run migrations
-└── pyproject.toml
+SQL Server replica (prod)     Postgres `source` (local stand-in)
+        │                                │
+        └──────────── extract ───────────┘
+                         │
+              parquet volume archive_data
+                         │
+                   ClickHouse `raw`
+                         │
+                   ClickHouse `marts`
+                         │
+                      Metabase
+```
+
+Two compose files, one local project (`dw-local`):
+
+- `platform/compose.yaml` — Postgres, ClickHouse, Metabase (stateful, rarely rebuilt)
+- `compose.yaml` — Dagster webserver + daemon (redeployed often)
+
+`make up` merges them. Production will run them as two projects on `dw_net`; see `docs/phases/02-platform.md`.
+
+## Implementation tracker
+
+Work is tracked with status in **[docs/STATUS.md](docs/STATUS.md)**. Phase write-ups:
+
+- [Local runbook](docs/local.md)
+- [Phase 0 — Prerequisites](docs/phases/00-prerequisites.md)
+- [Phase 1 — Host baseline](docs/phases/01-host-baseline.md)
+- [Phase 2 — Platform](docs/phases/02-platform.md)
+- [Phase 3 — Orchestration](docs/phases/03-orchestration.md)
+- [Phase 4 — Ingestion](docs/phases/04-ingestion.md)
+- [Phase 5 — Backups](docs/phases/05-backups.md)
+- [Phase 6 — Modeling](docs/phases/06-modeling.md)
+- [Phase 7 — Metabase](docs/phases/07-metabase.md)
+- [Phase 8 — Operations](docs/phases/08-operations.md)
+- [Open questions](docs/open-questions.md)
+
+## Layout
+
+```
+platform/                   # compose + init for postgres / clickhouse / metabase
+etl/                        # Dagster assets (bind-mounted into the containers)
+  assets/raw.py             # watermark extract → parquet → raw.*
+  assets/marts.py           # rebuild marts from raw
+  resources.py
+  definitions.py
+scripts/                    # wait, setup-metabase, verify, container entrypoint
+docs/                       # phase docs + STATUS.md
+data/                       # unused locally; production bind-mounts live under /srv/dw
 ```
