@@ -19,7 +19,8 @@ run_coordinator:
   module: dagster.core.run_coordinator
   class: QueuedRunCoordinator
   config:
-    max_concurrent_runs: 2
+    # Serialise complete runs until ingestion and mart rebuilds are concurrency-safe.
+    max_concurrent_runs: 1
 
 # No run_launcher block → DefaultRunLauncher (subprocess on the same host).
 # QueuedRunCoordinator caps how many run at once via max_concurrent_runs above.

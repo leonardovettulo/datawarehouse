@@ -62,7 +62,7 @@ services:
       start_period: 20s
 
   metabase:
-    image: metabase/metabase:v0.63.16.x
+    image: metabase/metabase:v0.63.16.4@sha256:1fa6f6b523a44159c26f6eb0704ed6189a8c7863fdab9e0c2483f388728c7ce3
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"

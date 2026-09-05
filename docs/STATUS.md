@@ -50,21 +50,23 @@ Legend:
 | 2.2 | Secrets in `.env` (not git), `.env.example` committed | `local_done` | `not_started` | |
 | 2.3 | `MB_ENCRYPTION_SECRET_KEY` also off-box | `n/a_local` | `not_started` | |
 | 2.4 | Postgres: dbs `metabase`, `dagster` (+ local `source`) | `local_done` | `not_started` | |
-| 2.5 | ClickHouse 24.8, memory cap, backup disk, log rotation | `local_done` | `not_started` | `compose.prod.yaml` + `CH_MEM_LIMIT` on the box |
+| 2.5 | ClickHouse pinned image, memory cap, backup disk, log rotation | `local_done` | `not_started` | Exact tag+digest; `CH_MEM_LIMIT` on the box |
 | 2.6 | Users `dagster` (write raw+marts), `metabase` (read marts) | `local_done` | `not_started` | |
-| 2.7 | Metabase on 127.0.0.1:3000, appdb Postgres | `local_done` | `not_started` | Image `v0.63.16.x` (driver bundled) |
+| 2.7 | Metabase on 127.0.0.1:3000, appdb Postgres | `local_done` | `not_started` | Image `v0.63.16.4` + digest (driver bundled) |
 | 2.8 | Metabase connected to ClickHouse, `SELECT` on marts | `local_done` | `not_started` | `make setup-metabase` |
-| 2.9 | Prod platform compose (no CH ports, bind mounts, no fake source) | `n/a_local` | `not_started` | `platform/compose.prod.yaml` |
+| 2.9 | Prod platform compose (no CH ports, bind mounts, no fake source) | `n/a_local` | `not_started` | Config ready in `platform/compose.prod.yaml`; not deployed |
 
 ## Phase 3 — Orchestration stack
 
 | ID | Item | Local | Prod | Notes |
 |---|---|---|---|---|
 | 3.1 | Dagster webserver `127.0.0.1:3030` + daemon | `local_done` | `not_started` | |
-| 3.2 | `etl/` bind-mounted, reload without rebuild | `not_started` | `not_started` | Local: copied into image (`make up-build`). Bind-mounts blocked by Docker Desktop file sharing. |
+| 3.2 | Reproducible orchestration image | `local_done` | `not_started` | Code copied; dependencies from committed `uv.lock` |
 | 3.3 | Trivial asset: source row counts → ClickHouse | `local_done` | `not_started` | `source_row_counts` |
 | 3.4 | pymssql / SQL Server driver | `not_started` | `not_started` | Local uses `psycopg` |
-| 3.5 | Daemon `mem_limit` | `not_started` | `not_started` | Add when RAM is known |
+| 3.5 | Daemon/webserver `mem_limit` | `n/a_local` | `not_started` | Defaults defined in prod compose; tune when RAM is known |
+| 3.6 | Prod Dagster compose: external network, archive, SQL Server contract | `n/a_local` | `not_started` | Config ready in root `compose.prod.yaml`; adapter still mock |
+| 3.7 | Prevent overlapping complete runs | `local_done` | `not_started` | `max_concurrent_runs: 1` |
 
 ## Phase 4 — Ingestion into `raw`
 

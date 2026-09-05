@@ -40,7 +40,8 @@ Re-running `make pipeline` after a successful run inserts 0 raw rows (watermark 
 | Change | Action |
 |---|---|
 | Python under `etl/` | `make up-build` (image copy; no bind-mount on this Docker Desktop) |
-| `pyproject.toml` / Dockerfile | `make up-build` |
+| `pyproject.toml` | `uv lock`, commit `uv.lock`, then `make up-build` |
+| Dockerfile | `make up-build` |
 | ClickHouse `config.d` or Postgres init | Init scripts run **only on an empty data dir**. `make reset && make bootstrap` |
 | `.env` secrets | `make down && make up` |
 | Prod host dirs | `sudo ./platform/prepare-host.sh` then `compose.prod.yaml` |

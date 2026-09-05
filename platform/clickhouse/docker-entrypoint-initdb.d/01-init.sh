@@ -38,9 +38,13 @@ CREATE SETTINGS PROFILE IF NOT EXISTS metabase_profile
         max_memory_usage = 2000000000
 "
 
-"${CH[@]}" --query "CREATE USER IF NOT EXISTS dagster IDENTIFIED BY '${CH_DAGSTER_PASSWORD}'"
-"${CH[@]}" --query "
-CREATE USER IF NOT EXISTS metabase IDENTIFIED BY '${CH_METABASE_PASSWORD}'
+"${CH[@]}" \
+  --param_dagster_password "$CH_DAGSTER_PASSWORD" \
+  --query "CREATE USER IF NOT EXISTS dagster IDENTIFIED WITH plaintext_password BY {dagster_password:String}"
+"${CH[@]}" \
+  --param_metabase_password "$CH_METABASE_PASSWORD" \
+  --query "
+CREATE USER IF NOT EXISTS metabase IDENTIFIED WITH plaintext_password BY {metabase_password:String}
     SETTINGS PROFILE metabase_profile
 "
 

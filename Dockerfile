@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
-FROM python:3.11-slim
+FROM python:3.11.13-slim@sha256:9bffe4353b925a1656688797ebc68f9c525e79b1d377a764d232182a519eeec4
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 /uv /usr/local/bin/uv
 
 WORKDIR /opt/dagster/app
 
@@ -14,12 +14,12 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
+ENV PATH="/opt/dagster/app/.venv/bin:${PATH}"
 
-# Layer 1: install dependencies (cached until pyproject.toml changes)
-COPY pyproject.toml ./
+# Layer 1: install the exact dependency graph from uv.lock.
+COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    mkdir -p etl && touch etl/__init__.py \
-    && uv pip install --system -e .
+    uv sync --frozen --no-dev --no-install-project
 
 # Layer 2: swap in real pipeline code (overlaid by bind-mount in local compose)
 COPY etl ./etl
