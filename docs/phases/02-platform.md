@@ -4,7 +4,7 @@
 
 Stateful services, started once, left alone. File: `platform/compose.yaml`.
 
-Local: merged with the orchestration compose into project `dw-local` (`make up`). Production: own project `dw-platform` on `dw_net`.
+Local: merged with the orchestration compose into project `dw-local` (`make up`). Production: `platform/compose.prod.yaml` as project `dw-platform` on `dw_net`.
 
 ## Services
 
@@ -28,12 +28,28 @@ Init: `platform/postgres/init/01-databases.sh` creates `metabase` and `dagster` 
 
 ## ClickHouse
 
+Baked into `platform/clickhouse/` (local and prod share the image):
+
 - `config.d/memory.xml` — 50% RAM ratio, 20 concurrent queries
 - `config.d/backups.xml` — `backups` disk at `/backups`
-- Init: databases `raw` / `marts`, users `dagster` / `metabase`, profile `readonly=2` (reads only, settings allowed for JDBC) + 30s + 2 GB for Metabase
+- `config.d/logger.xml` — 100M × 3 files under `/var/log/clickhouse-server`
+- Init: databases `raw` / `marts`, users `dagster` / `metabase`, profile `readonly=2` + 30s + 2 GB for Metabase
 - `default` has a password (`CH_ADMIN_PASSWORD`); it is not passwordless
+- `ulimit nofile` 262144 (required by the [official image](https://clickhouse.com/docs/get-started/setup/self-managed/docker))
 
 Init scripts run only when the data directory is empty.
+
+Do **not** set `CLICKHOUSE_SKIP_USER_SETUP`. Optional Linux capabilities (`SYS_NICE`, `IPC_LOCK`, `NET_ADMIN`) are omitted; add them later only if you need those extras.
+
+## Production bring-up
+
+```bash
+sudo ./platform/prepare-host.sh
+# set strong secrets in .env, including CH_MEM_LIMIT (≈ 50–60% of RAM)
+docker compose --project-directory platform -f platform/compose.prod.yaml --env-file .env up -d
+```
+
+`compose.prod.yaml` bind-mounts `/srv/dw/clickhouse`, `/srv/dw/clickhouse-logs`, `/srv/dw/backups/clickhouse`; applies `mem_limit`; publishes **no** ClickHouse ports. Postgres init does **not** seed the fake `source` database (`ENABLE_LOCAL_SOURCE` is local-only).
 
 ## Metabase
 

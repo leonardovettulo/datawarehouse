@@ -1,0 +1,7 @@
+<clickhouse>
+    <!-- Rotate ClickHouse's own files. Docker json-file rotation is separate (daemon.json). -->
+    <logger>
+        <size>100M</size>
+        <count>3</count>
+    </logger>
+</clickhouse>

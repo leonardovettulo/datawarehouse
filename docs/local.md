@@ -22,7 +22,7 @@ make bootstrap
 ClickHouse users inside the network:
 
 - `dagster` — write `raw` and `marts`
-- `metabase` — read `marts` only, `readonly=1`, 30s query cap
+- `metabase` — read `marts` only, `readonly=2`, 30s query cap
 
 ## What the first pipeline does
 
@@ -43,6 +43,7 @@ Re-running `make pipeline` after a successful run inserts 0 raw rows (watermark 
 | `pyproject.toml` / Dockerfile | `make up-build` |
 | ClickHouse `config.d` or Postgres init | Init scripts run **only on an empty data dir**. `make reset && make bootstrap` |
 | `.env` secrets | `make down && make up` |
+| Prod host dirs | `sudo ./platform/prepare-host.sh` then `compose.prod.yaml` |
 
 Do not `git pull` + restart while a run is in progress.
 
