@@ -1,0 +1,90 @@
+# Production orchestration stack. The platform stack must be running first so
+# the external `dw_net` network and postgres/clickhouse DNS names already exist.
+#
+# docker compose --project-directory . -f compose.prod.yaml --env-file .env up -d --build
+
+name: dw-orchestration
+
+services:
+  dagster-webserver:
+    build: .
+    image: dw-orchestration:prod
+    restart: unless-stopped
+    mem_limit: ${DAGSTER_WEBSERVER_MEM_LIMIT:-1g}
+    command:
+      - dagster-webserver
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - -w
+      - workspace.yaml
+    ports:
+      - "127.0.0.1:3030:3000"
+    environment: &dagster_env
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: ${PG_DAGSTER_PASSWORD:?}
+      DAGSTER_POSTGRES_DB: dagster
+      DAGSTER_POSTGRES_HOST: postgres
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: dagster
+      CH_DAGSTER_PASSWORD: ${CH_DAGSTER_PASSWORD:?}
+      ARCHIVE_ROOT: /srv/dw/archive
+      PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:?}
+
+      # SQL Server replica. The current mock resource still uses psycopg; these
+      # variables define the production contract for the future source adapter.
+      SOURCE_DB_TYPE: sqlserver
+      SOURCE_SQLSERVER_HOST: ${SOURCE_SQLSERVER_HOST:?}
+      SOURCE_SQLSERVER_PORT: ${SOURCE_SQLSERVER_PORT:-1433}
+      SOURCE_SQLSERVER_DB: ${SOURCE_SQLSERVER_DB:?}
+      SOURCE_SQLSERVER_USER: ${SOURCE_SQLSERVER_USER:?}
+      SOURCE_SQLSERVER_PASSWORD: ${SOURCE_SQLSERVER_PASSWORD:?}
+      SOURCE_SQLSERVER_ENCRYPT: ${SOURCE_SQLSERVER_ENCRYPT:-yes}
+      SOURCE_SQLSERVER_TRUST_CERT: ${SOURCE_SQLSERVER_TRUST_CERT:-no}
+
+      # Temporary aliases required while the pipeline remains the Postgres mock.
+      SOURCE_PG_HOST: ${SOURCE_SQLSERVER_HOST:?}
+      SOURCE_PG_PORT: ${SOURCE_SQLSERVER_PORT:-1433}
+      SOURCE_PG_DB: ${SOURCE_SQLSERVER_DB:?}
+      SOURCE_PG_USER: ${SOURCE_SQLSERVER_USER:?}
+      PG_SOURCE_PASSWORD: ${SOURCE_SQLSERVER_PASSWORD:?}
+    volumes:
+      - /srv/dw/archive:/srv/dw/archive
+    networks: [dw_net]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:3000/server_info', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  dagster-daemon:
+    image: dw-orchestration:prod
+    restart: unless-stopped
+    mem_limit: ${DAGSTER_DAEMON_MEM_LIMIT:-4g}
+    command:
+      - dagster-daemon
+      - run
+    environment: *dagster_env
+    volumes:
+      - /srv/dw/archive:/srv/dw/archive
+    networks: [dw_net]
+    healthcheck:
+      test: ["CMD", "dagster-daemon", "liveness-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  dw_net:
+    external: true
+    name: dw_net

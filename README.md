@@ -26,7 +26,8 @@ make verify
 make down
 ```
 
-If you change `pyproject.toml` or the Dockerfile: `make up-build`.
+If you change dependencies: run `uv lock`, commit `uv.lock`, then
+`make up-build`. Docker builds use `uv sync --frozen`.
 
 If you change only Python under `etl/`: `make up-build` (code is copied into the image; Docker Desktop here cannot bind-mount the repo).
 
@@ -48,12 +49,14 @@ SQL Server replica (prod)     Postgres `source` (local stand-in)
                       Metabase
 ```
 
-Two compose files, one local project (`dw-local`):
+Local uses two merged Compose files in one project (`dw-local`):
 
 - `platform/compose.yaml` — Postgres, ClickHouse, Metabase (stateful, rarely rebuilt)
 - `compose.yaml` — Dagster webserver + daemon (redeployed often)
 
-`make up` merges them. Production will run them as two projects on `dw_net`; see `docs/phases/02-platform.md`.
+`make up` merges them. Production uses `platform/compose.prod.yaml` and the
+root `compose.prod.yaml` as separate projects on external `dw_net`; see
+`docs/phases/02-platform.md`.
 
 ## Implementation tracker
 
@@ -69,13 +72,16 @@ Work is tracked with status in **[docs/STATUS.md](docs/STATUS.md)**. Phase write
 - [Phase 6 — Modeling](docs/phases/06-modeling.md)
 - [Phase 7 — Metabase](docs/phases/07-metabase.md)
 - [Phase 8 — Operations](docs/phases/08-operations.md)
+- [Database secret rotation](docs/secret-rotation.md)
 - [Open questions](docs/open-questions.md)
 
 ## Layout
 
 ```
 platform/                   # compose + init for postgres / clickhouse / metabase
-etl/                        # Dagster assets (bind-mounted into the containers)
+compose.prod.yaml           # production Dagster stack on external dw_net
+uv.lock                     # exact Python dependency graph used by Docker
+etl/                        # Dagster assets (copied into the image locally)
   assets/raw.py             # watermark extract → parquet → raw.*
   assets/marts.py           # rebuild marts from raw
   resources.py

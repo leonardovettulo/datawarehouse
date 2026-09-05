@@ -13,7 +13,7 @@ up: data-dirs ## Start platform + orchestration (no rebuild)
 up-build: data-dirs ## Rebuild the Dagster image and start everything
 	$(COMPOSE) up -d --build
 
-down: ## Stop containers (keeps data/ bind mounts)
+down: ## Stop containers (keeps local named volumes)
 	$(COMPOSE) down
 
 reset: ## Stop containers and delete local volumes (postgres, clickhouse, archive, metabase)

@@ -1,8 +1,10 @@
 # Phase 3 — Orchestration stack
 
-**Status:** `local_done` except SQL Server driver and daemon mem_limit. Tracker: [STATUS.md](../STATUS.md).
+**Status:** local stack and production Compose done; SQL Server driver remains
+`not_started` while the pipelines are mocks. Tracker: [STATUS.md](../STATUS.md).
 
-File: `compose.yaml`. Production: own git repo / project `dw-orchestration`.
+Local: `compose.yaml`. Production: root `compose.prod.yaml`, project
+`dw-orchestration`, attached to the platform's external `dw_net`.
 
 ## Services
 
@@ -11,22 +13,33 @@ Same image, two processes:
 - `dagster-webserver` → `127.0.0.1:3030`
 - `dagster-daemon` — schedules + queued run execution (runs execute **inside** this container)
 
-`etl/` is bind-mounted. `workspace.yaml` loads `python_module: etl.definitions`.
+The local image copies `etl/`; code changes require `make up-build`.
+`workspace.yaml` loads `python_module: etl.definitions`.
 
 ## Deploy loop
 
 ```bash
-# local
-# edit etl/** → Reload code location in the UI
-# schedules/sensors changed → restart dagster-daemon
-# requirements changed → make up-build
+# local: code or dependencies changed
+make up-build
+make pipeline
+
+# production (platform must be up first)
+docker compose -f compose.prod.yaml --env-file .env up -d --build
 ```
 
 Never restart while the nightly job is running.
 
 ## Driver
 
-Local: `psycopg` against Postgres `source`. Production: start with `pymssql`. Move to `pyodbc` + `msodbcsql18` only if bulk reads stall (adds a Microsoft apt repo and EULA to the Dockerfile).
+Local: `psycopg` against Postgres `source`. The production Compose defines
+`SOURCE_SQLSERVER_*`, encryption, and certificate-validation settings. The
+current mock resource still uses `psycopg`; implement the SQL Server adapter
+before running real pipelines. Start with `pymssql`, moving to `pyodbc` +
+`msodbcsql18` only if needed.
+
+Complete runs are serialized (`max_concurrent_runs: 1`) until ingestion and
+mart replacement become concurrency-safe. The production defaults are 1 GB for
+the webserver and 4 GB for the daemon; adjust them to the host RAM.
 
 ## Deliverable
 

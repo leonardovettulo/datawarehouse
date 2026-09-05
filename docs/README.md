@@ -13,4 +13,5 @@ Status lives in [STATUS.md](STATUS.md). How to run the laptop stack: [local.md](
 | [phases/06-modeling.md](phases/06-modeling.md) | 6 Marts / traceability |
 | [phases/07-metabase.md](phases/07-metabase.md) | 7 Access and dashboards |
 | [phases/08-operations.md](phases/08-operations.md) | 8 Alerts and handover |
+| [secret-rotation.md](secret-rotation.md) | Rotate existing DB credentials safely |
 | [open-questions.md](open-questions.md) | Blocking questions from the plan |

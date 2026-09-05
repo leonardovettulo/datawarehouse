@@ -10,9 +10,9 @@ Local: merged with the orchestration compose into project `dw-local` (`make up`)
 
 | Service | Image | Local port |
 |---|---|---|
-| `postgres` | `postgres:16-alpine` | unpublished |
-| `clickhouse` | `clickhouse/clickhouse-server:24.8` | `127.0.0.1:8123` |
-| `metabase` | `metabase/metabase:v0.63.16.x` | `127.0.0.1:3000` |
+| `postgres` | custom image, base `postgres:16.15-alpine` + digest | unpublished |
+| `clickhouse` | custom image, base `clickhouse-server:24.8.14.39` + digest | `127.0.0.1:8123` |
+| `metabase` | `metabase/metabase:v0.63.16.4` + digest | `127.0.0.1:3000` |
 
 Metabase 0.54+ bundles the ClickHouse driver. The plan's `v0.50.x` + extra JAR is not used.
 
@@ -21,6 +21,11 @@ Metabase 0.54+ bundles the ClickHouse driver. The plan's `v0.50.x` + extra JAR i
 `.env` mode `600`, not in git. `.env.example` is committed.
 
 `MB_ENCRYPTION_SECRET_KEY` must also live in the institution password manager. Without it, a Metabase `pg_dump` restores into an unusable instance.
+
+Init scripts use safely quoted client parameters, but they still run only on an
+empty data directory. Editing `.env` does not rotate existing users. Follow
+[Database secret rotation](../secret-rotation.md); never reset production
+volumes to change a password.
 
 ## Postgres
 
@@ -47,9 +52,17 @@ Do **not** set `CLICKHOUSE_SKIP_USER_SETUP`. Optional Linux capabilities (`SYS_N
 sudo ./platform/prepare-host.sh
 # set strong secrets in .env, including CH_MEM_LIMIT (≈ 50–60% of RAM)
 docker compose --project-directory platform -f platform/compose.prod.yaml --env-file .env up -d
+# then, from the repository root:
+docker compose -f compose.prod.yaml --env-file .env up -d --build
 ```
 
-`compose.prod.yaml` bind-mounts `/srv/dw/clickhouse`, `/srv/dw/clickhouse-logs`, `/srv/dw/backups/clickhouse`; applies `mem_limit`; publishes **no** ClickHouse ports. Postgres init does **not** seed the fake `source` database (`ENABLE_LOCAL_SOURCE` is local-only).
+The platform compose bind-mounts `/srv/dw/clickhouse`,
+`/srv/dw/clickhouse-logs`, `/srv/dw/backups/clickhouse`; applies `mem_limit`;
+and publishes **no** ClickHouse ports. The root `compose.prod.yaml` runs Dagster
+on external `dw_net`, bind-mounts `/srv/dw/archive`, publishes the webserver
+only on `127.0.0.1:3030`, and defines the SQL Server replica contract. Postgres
+init does **not** seed the fake `source` database (`ENABLE_LOCAL_SOURCE` is
+local-only).
 
 ## Metabase
 
