@@ -35,10 +35,10 @@ Legend:
 
 | ID | Item | Local | Prod | Notes |
 |---|---|---|---|---|
-| 1.1 | Disk layout `/srv/dw` | `n/a_local` | `not_started` | Local: named volumes |
+| 1.1 | Disk layout `/srv/dw` | `n/a_local` | `not_started` | `platform/prepare-host.sh` (chown 101:101 / 999:999) |
 | 1.2 | Timezone + chrony, timestamps UTC in CH | `local_done` | `not_started` | |
 | 1.3 | SSH hardened | `n/a_local` | `not_started` | |
-| 1.4 | Docker CE + log rotation | `n/a_local` | `not_started` | Docker Desktop locally |
+| 1.4 | Docker CE + log rotation | `n/a_local` | `not_started` | Engine ≥ 20.10.10; CH logger.xml + clickhouse-logs |
 | 1.5 | UFW, no non-loopback publishes | `local_done` | `not_started` | Local binds are `127.0.0.1` |
 | 1.6 | nginx + TLS placeholder | `not_started` | `not_started` | Local Metabase is :3000 |
 
@@ -50,10 +50,11 @@ Legend:
 | 2.2 | Secrets in `.env` (not git), `.env.example` committed | `local_done` | `not_started` | |
 | 2.3 | `MB_ENCRYPTION_SECRET_KEY` also off-box | `n/a_local` | `not_started` | |
 | 2.4 | Postgres: dbs `metabase`, `dagster` (+ local `source`) | `local_done` | `not_started` | |
-| 2.5 | ClickHouse 24.8, memory cap, backup disk | `local_done` | `not_started` | |
+| 2.5 | ClickHouse 24.8, memory cap, backup disk, log rotation | `local_done` | `not_started` | `compose.prod.yaml` + `CH_MEM_LIMIT` on the box |
 | 2.6 | Users `dagster` (write raw+marts), `metabase` (read marts) | `local_done` | `not_started` | |
 | 2.7 | Metabase on 127.0.0.1:3000, appdb Postgres | `local_done` | `not_started` | Image `v0.63.16.x` (driver bundled) |
 | 2.8 | Metabase connected to ClickHouse, `SELECT` on marts | `local_done` | `not_started` | `make setup-metabase` |
+| 2.9 | Prod platform compose (no CH ports, bind mounts, no fake source) | `n/a_local` | `not_started` | `platform/compose.prod.yaml` |
 
 ## Phase 3 — Orchestration stack
 

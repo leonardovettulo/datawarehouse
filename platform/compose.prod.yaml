@@ -1,9 +1,18 @@
-name: dw-local
+# Production platform stack (Ubuntu box). Not used by `make up`.
+#
+#   sudo ./platform/prepare-host.sh
+#   docker compose --project-directory platform -f platform/compose.prod.yaml --env-file .env up -d
+#
+# Do not publish 8123/9000 to 0.0.0.0. Metabase is loopback-only; nginx on the host
+# terminates TLS. Native protocol (9000) stays on dw_net for clickhouse-client
+# via `docker exec`. Optional Linux caps (SYS_NICE, IPC_LOCK) are omitted.
+
+name: dw-platform
 
 services:
   postgres:
-    build: ./platform/postgres
-    image: dw-postgres:local
+    build: ./postgres
+    image: dw-postgres:prod
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -11,10 +20,8 @@ services:
       POSTGRES_DB: postgres
       PG_METABASE_PASSWORD: ${PG_METABASE_PASSWORD:?}
       PG_DAGSTER_PASSWORD: ${PG_DAGSTER_PASSWORD:?}
-      PG_SOURCE_PASSWORD: ${PG_SOURCE_PASSWORD:?}
-      ENABLE_LOCAL_SOURCE: "1"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /srv/dw/postgres:/var/lib/postgresql/data
     networks: [dw_net]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres"]
@@ -24,9 +31,10 @@ services:
       start_period: 10s
 
   clickhouse:
-    build: ./platform/clickhouse
-    image: dw-clickhouse:local
+    build: ./clickhouse
+    image: dw-clickhouse:prod
     restart: unless-stopped
+    mem_limit: ${CH_MEM_LIMIT:-8g}
     ulimits:
       nofile:
         soft: 262144
@@ -38,11 +46,9 @@ services:
       CH_DAGSTER_PASSWORD: ${CH_DAGSTER_PASSWORD:?}
       CH_METABASE_PASSWORD: ${CH_METABASE_PASSWORD:?}
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_logs:/var/log/clickhouse-server
-      - clickhouse_backups:/backups
-    ports:
-      - "127.0.0.1:8123:8123"
+      - /srv/dw/clickhouse:/var/lib/clickhouse
+      - /srv/dw/clickhouse-logs:/var/log/clickhouse-server
+      - /srv/dw/backups/clickhouse:/backups
     networks: [dw_net]
     healthcheck:
       test:
@@ -67,12 +73,12 @@ services:
       MB_DB_DBNAME: metabase
       MB_DB_USER: metabase
       MB_DB_PASS: ${PG_METABASE_PASSWORD:?}
-      MB_SITE_URL: ${MB_SITE_URL:-http://localhost:3000}
+      MB_SITE_URL: ${MB_SITE_URL:?}
       MB_ENCRYPTION_SECRET_KEY: ${MB_ENCRYPTION_SECRET_KEY:?}
       JAVA_TIMEZONE: UTC
       JAVA_TOOL_OPTIONS: -Xmx768m
     volumes:
-      - metabase_data:/metabase-data
+      - /srv/dw/metabase:/metabase-data
     networks: [dw_net]
     depends_on:
       postgres:
@@ -87,10 +93,3 @@ services:
 networks:
   dw_net:
     name: dw_net
-
-volumes:
-  postgres_data:
-  clickhouse_data:
-  clickhouse_logs:
-  clickhouse_backups:
-  metabase_data:

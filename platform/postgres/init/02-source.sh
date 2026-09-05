@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if [ "${ENABLE_LOCAL_SOURCE:-}" != "1" ]; then
+  echo "Skipping local source seed."
+  exit 0
+fi
+
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname source \
     -f /docker-entrypoint-initdb.d/sql/source.sql
 

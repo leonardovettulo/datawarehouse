@@ -12,9 +12,11 @@ Goal: a hardened Ubuntu 24.04 box where the firewall actually means something.
 /srv/dw           rest     data, bind-mounted into containers
 ```
 
-Under `/srv/dw`: `clickhouse/`, `postgres/`, `metabase/`, `archive/`, `backups/`, `platform/`, `orchestration/`.
+Under `/srv/dw`: `clickhouse/`, `clickhouse-logs/`, `postgres/`, `metabase/`, `archive/`, `backups/`, `platform/`, `orchestration/`.
 
-Local stand-in: Docker named volumes (`postgres_data`, `clickhouse_data`, `archive_data`). Production uses `/srv/dw` bind mounts.
+Create them with `sudo ./platform/prepare-host.sh` (ClickHouse dirs `chown 101:101`, Postgres `999:999`). Bind-mounting host dirs without that ownership is why the official image refuses to start.
+
+Local stand-in: Docker named volumes (`postgres_data`, `clickhouse_data`, `clickhouse_logs`, `archive_data`). Production uses `/srv/dw` bind mounts (`platform/compose.prod.yaml`).
 
 ## 1.2 OS
 
@@ -29,9 +31,11 @@ SSH: key-only, no root login, no password auth.
 
 ## 1.3 Docker
 
-Official Docker repo, not the Ubuntu package. `daemon.json` log rotation (`max-size: 50m`, `max-file: 3`) is not optional.
+Official Docker repo, not the Ubuntu package. Docker Engine **≥ 20.10.10** (required if you later move ClickHouse past 24.11). `daemon.json` log rotation (`max-size: 50m`, `max-file: 3`) is not optional — it covers container stdout. ClickHouse also writes `/var/log/clickhouse-server`; that directory is bind-mounted and rotated in `config.d/logger.xml` (100M × 3).
 
 `docker` group membership is root-equivalent. Deploy user only; record it in the governance doc.
+
+CPU: the official amd64 image needs ~AVX2-era chips (x86-64-v3). arm64 needs ARMv8.2-A (not Raspberry Pi 4). See [ClickHouse Docker setup](https://clickhouse.com/docs/get-started/setup/self-managed/docker).
 
 ## 1.4 Firewall
 
@@ -48,7 +52,7 @@ Hard invariant: no container publishes a port to `0.0.0.0`. Check before every g
 docker ps --format '{{.Names}}\t{{.Ports}}' | grep -v '127.0.0.1'
 ```
 
-Local: Metabase `127.0.0.1:3000`, Dagster `127.0.0.1:3030`, ClickHouse `127.0.0.1:8123`. Postgres unpublished.
+Local: Metabase `127.0.0.1:3000`, Dagster `127.0.0.1:3030`, ClickHouse HTTP `127.0.0.1:8123`. Postgres unpublished. Production: ClickHouse **unpublished** (HTTP and native `9000` stay on `dw_net`; debug with `docker exec`). Never `CLICKHOUSE_SKIP_USER_SETUP`.
 
 ## 1.5 nginx on the host
 
