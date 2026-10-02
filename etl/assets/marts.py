@@ -71,6 +71,9 @@ PARTITION BY toYYYYMM(periodo)
 ORDER BY (indicador, periodo)
 """
 
+# raw is append-only: every extracted version of a source row is kept. Marts read
+# only the current version of each id, otherwise an UPDATE at the source (or a
+# batch re-inserted after a failed watermark write) is counted twice.
 EVENTO_SQL = r"""
 INSERT INTO marts.insumo_evento
 SELECT
@@ -87,7 +90,7 @@ SELECT
     id AS origen_id,
     '' AS paciente_ref,
     now64(6) AS _built_at
-FROM raw.compras
+FROM (SELECT * FROM raw.compras ORDER BY updated_at DESC, _ingested_at DESC LIMIT 1 BY id)
 UNION ALL
 SELECT
     concat('entrega-', toString(id)),
@@ -103,7 +106,7 @@ SELECT
     id,
     '',
     now64(6)
-FROM raw.entregas_farmacia
+FROM (SELECT * FROM raw.entregas_farmacia ORDER BY updated_at DESC, _ingested_at DESC LIMIT 1 BY id)
 UNION ALL
 SELECT
     concat('hc-', toString(id)),
@@ -119,7 +122,7 @@ SELECT
     id,
     lower(hex(SHA256(concat(nro_historia, {pepper:String})))),
     now64(6)
-FROM raw.hc_registros
+FROM (SELECT * FROM raw.hc_registros ORDER BY updated_at DESC, _ingested_at DESC LIMIT 1 BY id)
 UNION ALL
 SELECT
     concat('facturacion-', toString(id)),
@@ -135,7 +138,7 @@ SELECT
     id,
     '',
     now64(6)
-FROM raw.facturacion
+FROM (SELECT * FROM raw.facturacion ORDER BY updated_at DESC, _ingested_at DESC LIMIT 1 BY id)
 """
 
 GAP_SQL = """

@@ -21,11 +21,12 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
-# Layer 2: swap in real pipeline code (overlaid by bind-mount in local compose)
+# Layer 2: pipeline code. Changes here need scripts/deploy.sh (make deploy).
 COPY etl ./etl
 
 COPY dagster/dagster.yaml "${DAGSTER_HOME}/dagster.yaml"
 COPY workspace.yaml ./workspace.yaml
+COPY scripts/dagster_ops.py ./dagster_ops.py
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
