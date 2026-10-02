@@ -24,6 +24,16 @@ run_coordinator:
 
 # No run_launcher block → DefaultRunLauncher (subprocess on the same host).
 # QueuedRunCoordinator caps how many run at once via max_concurrent_runs above.
+# Runs orphaned by a daemon restart are failed at startup (scripts/entrypoint.sh).
+
+# Backstop for runs that hang while their process is still alive. DefaultRunLauncher
+# has no worker health check, so only the timeouts apply. Raise max_runtime_seconds
+# if the production nightly ever approaches it.
+run_monitoring:
+  enabled: true
+  start_timeout_seconds: 300
+  max_runtime_seconds: 21600
+  poll_interval_seconds: 60
 
 retention:
   schedule:

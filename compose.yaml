@@ -1,5 +1,6 @@
 # Orchestration stack: redeployed often. Merged with platform/compose.yaml via `make up`.
-# Production: own project (`dw-orchestration`) on the external dw_net; bind-mount etl/.
+# Production: own project (`dw-orchestration`) on the external dw_net (compose.prod.yaml).
+# Code changes: scripts/deploy.sh (make deploy) — waits for running jobs, then restarts.
 
 name: dw-local
 

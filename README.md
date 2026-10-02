@@ -21,15 +21,18 @@ Day to day after the first bootstrap:
 
 ```bash
 make up                       # start without rebuilding
-make pipeline                 # re-run extracts + marts (no-op if no new source rows)
+make pipeline                 # queue extracts + marts and wait (no-op if no new source rows)
+make deploy                   # ship etl/ changes; waits for running jobs before restarting
 make verify
 make down
 ```
 
 If you change dependencies: run `uv lock`, commit `uv.lock`, then
-`make up-build`. Docker builds use `uv sync --frozen`.
+`make deploy`. Docker builds use `uv sync --frozen`.
 
-If you change only Python under `etl/`: `make up-build` (code is copied into the image; Docker Desktop here cannot bind-mount the repo).
+If you change only Python under `etl/`: `make deploy` (code is copied into the image;
+the script waits for any running job before restarting Dagster). Production:
+`scripts/deploy.sh prod`.
 
 Wipe everything local and start again: `make reset && make bootstrap`.
 
