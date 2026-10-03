@@ -16,7 +16,6 @@ Then open:
 | Metabase | http://127.0.0.1:3000 | `admin@localhost.local` / `LocalDev123456` |
 | Dagster | http://127.0.0.1:3030 | No auth; local only |
 | ClickHouse HTTP | http://127.0.0.1:8123 | User `default`, password from `.env` |
-| Mailpit | http://127.0.0.1:8025 | Catches Dagster alert emails locally |
 
 Day to day after the first bootstrap:
 

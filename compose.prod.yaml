@@ -36,14 +36,7 @@ services:
       PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:?}
       EXTRACT_CHUNK_ROWS: ${EXTRACT_CHUNK_ROWS:-50000}
 
-      # Alerts (etl/alerts.py). Empty values disable that channel.
-      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
-      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
-      ALERT_SMTP_STARTTLS: ${ALERT_SMTP_STARTTLS:-yes}
-      ALERT_SMTP_USER: ${ALERT_SMTP_USER:-}
-      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD:-}
-      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
-      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      # Alerts (etl/alerts.py): Better Stack heartbeat. Empty disables alerting.
       PIPELINE_HEARTBEAT_URL: ${PIPELINE_HEARTBEAT_URL:-}
       DAGSTER_BASE_URL: ${DAGSTER_BASE_URL:-}
 

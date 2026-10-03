@@ -18,7 +18,6 @@ make bootstrap
 | Metabase | http://127.0.0.1:3000 | `MB_ADMIN_EMAIL` / `MB_ADMIN_PASSWORD` in `.env` |
 | Dagster | http://127.0.0.1:3030 | none |
 | ClickHouse HTTP | http://127.0.0.1:8123 | `default` / `CH_ADMIN_PASSWORD` |
-| Mailpit (alert emails) | http://127.0.0.1:8025 | none; local only |
 
 ClickHouse users inside the network:
 

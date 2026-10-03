@@ -1,13 +1,10 @@
-"""Pipeline alerting: email on run failure, heartbeat on nightly success.
+"""Pipeline alerting through a heartbeat monitor (Better Stack).
 
-Two independent channels, both configured by environment and both optional:
-
-- Email (ALERT_SMTP_*, ALERT_EMAIL_*): one message per failed run, any job.
-- Heartbeat (PIPELINE_HEARTBEAT_URL): pinged when ingest_and_marts succeeds and
-  `<url>/fail` when any run fails. Works with Better Stack heartbeats and
-  Healthchecks.io. The monitoring service alerts when no success ping arrives
-  within its period, which also catches "the schedule never ran" — something a
-  failure sensor cannot see.
+PIPELINE_HEARTBEAT_URL is pinged when ingest_and_marts succeeds and `<url>/fail`
+is pinged when any run fails. Better Stack opens an incident on /fail right away,
+and also when no success ping arrives within the heartbeat period, which catches
+"the schedule never ran" — something a failure sensor cannot see. Better Stack
+handles routing (email, SMS, app). Healthchecks.io accepts the same calls.
 
 Only job names, run ids and error messages are sent; never data rows.
 """
@@ -15,10 +12,7 @@ Only job names, run ids and error messages are sent; never data rows.
 from __future__ import annotations
 
 import os
-import smtplib
-import ssl
 import urllib.request
-from email.message import EmailMessage
 
 from dagster import (
     DagsterRunStatus,
@@ -34,30 +28,6 @@ from etl.jobs import ingest_and_marts
 
 def _env(name: str) -> str:
     return os.environ.get(name, "").strip()
-
-
-def send_email(subject: str, body: str) -> bool:
-    """Send via ALERT_SMTP_HOST. Returns False (and does nothing) when not configured."""
-    host = _env("ALERT_SMTP_HOST")
-    recipients = [r.strip() for r in _env("ALERT_EMAIL_TO").split(",") if r.strip()]
-    if not host or not recipients:
-        return False
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = _env("ALERT_EMAIL_FROM") or "dagster@localhost"
-    message["To"] = ", ".join(recipients)
-    message.set_content(body)
-
-    port = int(_env("ALERT_SMTP_PORT") or 587)
-    with smtplib.SMTP(host, port, timeout=30) as smtp:
-        if _env("ALERT_SMTP_STARTTLS").lower() not in ("0", "no", "false"):
-            smtp.starttls(context=ssl.create_default_context())
-        user = _env("ALERT_SMTP_USER")
-        if user:
-            smtp.login(user, _env("ALERT_SMTP_PASSWORD"))
-        smtp.send_message(message)
-    return True
 
 
 def ping_heartbeat(failed: bool = False, body: str = "") -> bool:
@@ -80,27 +50,17 @@ def _run_url(run_id: str) -> str:
 
 @run_failure_sensor(
     name="alert_on_run_failure",
-    description="Email + heartbeat /fail for every failed run in this code location.",
+    description="Heartbeat /fail for every failed run in this code location.",
     default_status=DefaultSensorStatus.RUNNING,
     minimum_interval_seconds=30,
 )
 def alert_on_run_failure(context: RunFailureSensorContext):
     run = context.dagster_run
     error = context.failure_event.message or "(no error message)"
-    subject = f"[DW] Dagster run failed: {run.job_name}"
     body = f"Job: {run.job_name}\nRun: {_run_url(run.run_id)}\n\n{error}\n"
-
-    # Try both channels before raising, so one broken channel doesn't silence the other.
-    # A raised error fails the sensor tick and the run is retried on the next tick.
-    errors = []
-    for name, send in (("email", lambda: send_email(subject, body)), ("heartbeat", lambda: ping_heartbeat(True, body))):
-        try:
-            if not send():
-                context.log.warning(f"Alert channel {name} is not configured; skipped.")
-        except Exception as exc:  # noqa: BLE001 - report every channel failure
-            errors.append(f"{name}: {exc}")
-    if errors:
-        raise RuntimeError("Could not deliver failure alert: " + "; ".join(errors))
+    # A network error raises, which fails the sensor tick; the run is retried next tick.
+    if not ping_heartbeat(failed=True, body=body):
+        context.log.warning("PIPELINE_HEARTBEAT_URL is not set; failure not reported.")
 
 
 @run_status_sensor(

@@ -1,16 +1,16 @@
 # Phase 8 — Operations and handover
 
-**Status:** alerts `local_done` (tested against Mailpit and a fake heartbeat receiver); not deployed. Tracker: [STATUS.md](../STATUS.md).
+**Status:** alerts `local_done` (tested against a fake heartbeat receiver); not deployed. Tracker: [STATUS.md](../STATUS.md).
 
 ## Alerting
 
-Three signals, each catching something the others can't:
+Everything reports to Better Stack heartbeats; Better Stack does the routing
+(email, SMS, app). Each signal catches something the others can't:
 
 | Signal | Code | Fires when | Catches |
 |---|---|---|---|
 | Host heartbeat | `platform/monitoring/dw-healthcheck.sh` (systemd timer, 5 min) | `/fail` on disk ≥ 80%, memory < 10% available, an expected container missing / stopped / unhealthy. No ping at all when the box or Docker is down | Server-level problems, including total outage |
-| Pipeline heartbeat | `etl/alerts.py` `heartbeat_on_success` / `alert_on_run_failure` | Ping on every successful `ingest_and_marts`; `/fail` on any failed run | "The nightly did not succeed", including "it never started" (schedule off, daemon dead, queue stuck) |
-| Failure email | `etl/alerts.py` `alert_on_run_failure` | Any failed run, with the error and a link to the run | Details for whoever fixes it |
+| Pipeline heartbeat | `etl/alerts.py` `heartbeat_on_success` / `alert_on_run_failure` | Ping on every successful `ingest_and_marts`; `/fail` with the error and a link to the run on any failed run | Failed runs immediately, and "the nightly did not succeed" including "it never started" (schedule off, daemon dead, queue stuck) |
 
 Nothing but host facts, job names, run ids and error messages leaves the box. No
 logs, no rows: patient data never reaches the monitoring service (Ley 25.326).
@@ -30,7 +30,7 @@ Set up two heartbeats:
 | `dw-host` | 5 min | 5 min | `HOST_HEARTBEAT_URL` in `/etc/dw/healthcheck.env` |
 | `dw-nightly` | 24 h | 3 h (the nightly starts 06:00) | `PIPELINE_HEARTBEAT_URL` in `.env` |
 
-Route both to the people in open question 13 (email, SMS or app).
+Route both to the people in open question 12 (email, SMS or app).
 
 ### Install (production)
 
@@ -43,18 +43,18 @@ systemctl list-timers dw-healthcheck.timer
 journalctl -u dw-healthcheck -n 20
 ```
 
-Pipeline alerts: set `ALERT_SMTP_*`, `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO`,
-`PIPELINE_HEARTBEAT_URL` and `DAGSTER_BASE_URL` in `.env`, then `scripts/deploy.sh prod`.
-Empty values disable that channel (the sensor logs a warning).
+Pipeline alerts: set `PIPELINE_HEARTBEAT_URL` and `DAGSTER_BASE_URL` in `.env`,
+then `scripts/deploy.sh prod`. Empty `PIPELINE_HEARTBEAT_URL` disables them (the
+sensors log a warning).
 
 ### Local
 
-Alert emails land in Mailpit (http://127.0.0.1:8025). To see one, stop ClickHouse
-and run the pipeline:
+Put a test heartbeat URL in `PIPELINE_HEARTBEAT_URL` in `.env`, `make deploy`, then
+`make pipeline` (success ping). To see a `/fail`, stop ClickHouse and run it again:
 
 ```bash
 docker compose -p dw-local -f platform/compose.yaml -f compose.yaml --project-directory . stop clickhouse
-make pipeline        # fails → email in Mailpit within ~30 s
+make pipeline        # fails → /fail reaches Better Stack within ~30 s
 docker compose -p dw-local -f platform/compose.yaml -f compose.yaml --project-directory . start clickhouse
 ```
 
