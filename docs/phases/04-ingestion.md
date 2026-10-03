@@ -7,12 +7,14 @@ Code: `etl/assets/raw.py`.
 ## Pattern (per table)
 
 1. Read last watermark from `raw.ingest_state`
-2. Pull the delta from the source
-3. Write Parquet to `/srv/dw/archive/<source>/<table>/<yyyy>/<mm>/<yyyy-mm-dd>_<batch_id>.parquet.zst`
-4. Insert into `raw.<table>` with `_ingested_at` (UTC) and `_batch_id`
-5. Advance the watermark **only after both writes succeed**
+2. Stream the delta from the source in chunks of `EXTRACT_CHUNK_ROWS` (default 50 000, server-side cursor)
+3. Per chunk: append to Parquet `/srv/dw/archive/<source>/<table>/<yyyy>/<mm>/<yyyy-mm-dd>_<batch_id>.parquet.zst`, then insert into `raw.<table>` with `_ingested_at` (UTC) and `_batch_id`
+4. Advance the watermark **only after every chunk landed**
+5. Asset check `matches_source` (blocking): every source row up to the watermark has its `id` in raw. Missing rows fail the run before marts are rebuilt; ids deleted at the source only warn.
 
-Parquet first. If ClickHouse insert fails, the extract still exists and the batch is replayable.
+Parquet first. If a run dies half-way, the next run re-reads the same delta; marts
+read the latest version per `id`, so repeated rows never count twice. Memory use is
+bounded by the chunk size, not the table size.
 
 ## Table engines
 

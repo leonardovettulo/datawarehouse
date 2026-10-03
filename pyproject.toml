@@ -12,6 +12,11 @@ dependencies = [
     "pyarrow>=17",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -19,3 +24,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["etl*"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Dagster 1.9 internals on pydantic 2.11; not ours.
+    "ignore::DeprecationWarning:dagster._model.pydantic_compat_layer",
+]

@@ -11,6 +11,9 @@ From the implementation plan. Update answers here; do not bury them in chat.
 | 3 | Rough volume: 20 GB or 2 TB? | _open_ — size from relevamiento |
 | 4 | Backup destination: NAS, second server, or request one? | _open_ |
 | 5 | Sudo on the box, or does IT run it? Can we set UFW and nginx? | _open_ |
+| 11 | SMTP relay for alert emails (host, port, auth)? | _open_ — sets `ALERT_SMTP_*` |
+| 12 | Outbound HTTPS from the server to the heartbeat service (Better Stack / Healthchecks.io)? Otherwise self-host Healthchecks on another box | _open_ |
+| 13 | Who receives alerts, and who is on call outside office hours? | _open_ |
 
 ## Needed before Phase 6–7 in production
 

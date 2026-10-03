@@ -1,18 +1,26 @@
-"""Per-table extract: watermark → source delta → parquet → ClickHouse raw."""
+"""Per-table extract: watermark → source delta → parquet → ClickHouse raw.
+
+The delta is streamed in chunks (EXTRACT_CHUNK_ROWS, default 50 000): each chunk
+is appended to the batch parquet file, then inserted into raw. The watermark only
+advances after every chunk landed. If a run dies half-way, the next run re-reads
+the same delta; marts read the latest version per id, so repeats don't count twice.
+"""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
-from dagster import MaterializeResult, asset
+from dagster import AssetCheckResult, AssetCheckSeverity, MaterializeResult, asset, asset_check
 
 from etl.resources import ArchiveResource, ClickHouseResource, SourceDBResource
 
 WATERMARK_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+DEFAULT_CHUNK_ROWS = 50_000
 
 RAW_DDL = """
 CREATE TABLE IF NOT EXISTS raw.{table}
@@ -100,10 +108,27 @@ def _last_watermark(ch, table_name: str) -> datetime:
     return _aware(result.result_rows[0][0])
 
 
-def _write_parquet(archive_root: str, table: str, batch_id: str, ingested_at: datetime, columns, rows) -> Path:
+def _arrow_schema(spec: SourceTable):
+    """Explicit schema matching RAW_DDL, so every chunk of a batch shares one parquet schema."""
     import pyarrow as pa
-    import pyarrow.parquet as pq
 
+    ts = pa.timestamp("us", tz="UTC")
+    fields = [
+        ("id", pa.int32()),
+        ("insumo_codigo", pa.string()),
+        ("insumo_nombre", pa.string()),
+        ("fecha", pa.date32()),
+        ("cantidad", pa.float64()),
+        ("unidad", pa.string()),
+        *[(col, pa.string()) for col in spec.extra_source_cols],
+        ("updated_at", ts),
+        ("_ingested_at", ts),
+        ("_batch_id", pa.string()),
+    ]
+    return pa.schema(fields)
+
+
+def _parquet_path(archive_root: str, table: str, batch_id: str, ingested_at: datetime) -> Path:
     directory = (
         Path(archive_root)
         / "source"
@@ -112,10 +137,11 @@ def _write_parquet(archive_root: str, table: str, batch_id: str, ingested_at: da
         / ingested_at.strftime("%m")
     )
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{ingested_at.strftime('%Y-%m-%d')}_{batch_id}.parquet.zst"
-    arrays = {name: [row[i] for row in rows] for i, name in enumerate(columns)}
-    pq.write_table(pa.table(arrays), path, compression="zstd")
-    return path
+    return directory / f"{ingested_at.strftime('%Y-%m-%d')}_{batch_id}.parquet.zst"
+
+
+def _chunk_rows() -> int:
+    return int(os.environ.get("EXTRACT_CHUNK_ROWS", DEFAULT_CHUNK_ROWS))
 
 
 def _make_raw_asset(spec: SourceTable):
@@ -143,38 +169,51 @@ def _make_raw_asset(spec: SourceTable):
 
         context.log.info("Extracting %s after watermark %s (batch %s)", spec.name, watermark, batch_id)
 
-        with source_db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT {', '.join(source_cols)} FROM {spec.name} "
-                    "WHERE updated_at > %s ORDER BY updated_at, id",
-                    (watermark,),
-                )
-                fetched = cur.fetchall()
+        import pyarrow as pa
+        import pyarrow.parquet as pq
 
-        if not fetched:
+        schema = _arrow_schema(spec)
+        sql = (
+            f"SELECT {', '.join(source_cols)} FROM {spec.name} "
+            "WHERE updated_at > %s ORDER BY updated_at, id"
+        )
+        parquet_path = None
+        writer = None
+        total = 0
+        new_watermark = watermark
+        try:
+            for fetched in source_db.stream(sql, (watermark,), _chunk_rows()):
+                rows = [tuple(_coerce(v) for v in row) + (ingested_at, batch_id) for row in fetched]
+                if writer is None:
+                    parquet_path = _parquet_path(archive.root, spec.name, batch_id, ingested_at)
+                    writer = pq.ParquetWriter(parquet_path, schema, compression="zstd")
+                columns = {name: [row[i] for row in rows] for i, name in enumerate(insert_cols)}
+                writer.write_table(pa.table(columns, schema=schema))
+                ch.insert(f"raw.{spec.name}", rows, column_names=list(insert_cols))
+                new_watermark = max(new_watermark, max(row[updated_at_index] for row in rows))
+                total += len(rows)
+                context.log.info("%s: %s rows so far", spec.name, total)
+        finally:
+            if writer is not None:
+                writer.close()
+
+        if total == 0:
             context.log.info("No new rows for %s", spec.name)
             return MaterializeResult(
                 metadata={"table": spec.name, "rows": 0, "watermark": str(watermark), "batch_id": batch_id}
             )
 
-        rows = [tuple(_coerce(v) for v in row) + (ingested_at, batch_id) for row in fetched]
-        parquet_path = _write_parquet(archive.root, spec.name, batch_id, ingested_at, insert_cols, rows)
-        context.log.info("Wrote %s rows to %s", len(rows), parquet_path)
-
-        ch.insert(f"raw.{spec.name}", rows, column_names=list(insert_cols))
-
-        new_watermark = max(_aware(row[updated_at_index]) for row in fetched)
+        context.log.info("Wrote %s rows to %s", total, parquet_path)
         ch.insert(
             "raw.ingest_state",
-            [[spec.name, new_watermark, batch_id, ingested_at, len(rows)]],
+            [[spec.name, new_watermark, batch_id, ingested_at, total]],
             column_names=["table_name", "watermark", "last_batch_id", "last_ingested_at", "rows_inserted"],
         )
 
         return MaterializeResult(
             metadata={
                 "table": spec.name,
-                "rows": len(rows),
+                "rows": total,
                 "batch_id": batch_id,
                 "parquet": str(parquet_path),
                 "watermark_advanced_to": str(new_watermark),
@@ -185,6 +224,51 @@ def _make_raw_asset(spec: SourceTable):
 
 
 raw_assets = [_make_raw_asset(spec) for spec in TABLES]
+
+
+def _make_reconcile_check(spec: SourceTable, raw_asset):
+    @asset_check(
+        asset=raw_asset,
+        name="matches_source",
+        blocking=True,
+        description=(
+            f"Every source.{spec.name} row up to the current watermark is in raw.{spec.name}. "
+            "Missing rows fail the run before marts are rebuilt; extra ids (deleted at the "
+            "source) only warn."
+        ),
+    )
+    def _check(source_db: SourceDBResource, clickhouse: ClickHouseResource) -> AssetCheckResult:
+        ch = clickhouse.client()
+        watermark = _last_watermark(ch, spec.name)
+        # Bounded by the watermark so rows that arrive at the source mid-run are not
+        # reported as missing; they belong to the next run.
+        with source_db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT count(*) FROM {spec.name} WHERE updated_at <= %s", (watermark,))
+                source_count = int(cur.fetchone()[0])
+        raw_count = int(ch.query(f"SELECT uniqExact(id) FROM raw.{spec.name}").result_rows[0][0])
+
+        metadata = {"source_rows": source_count, "raw_distinct_ids": raw_count, "watermark": str(watermark)}
+        if raw_count < source_count:
+            return AssetCheckResult(
+                passed=False,
+                severity=AssetCheckSeverity.ERROR,
+                description=f"{source_count - raw_count} source rows missing from raw.{spec.name}",
+                metadata=metadata,
+            )
+        if raw_count > source_count:
+            return AssetCheckResult(
+                passed=False,
+                severity=AssetCheckSeverity.WARN,
+                description=f"{raw_count - source_count} ids in raw.{spec.name} no longer exist at the source",
+                metadata=metadata,
+            )
+        return AssetCheckResult(passed=True, metadata=metadata)
+
+    return _check
+
+
+raw_checks = [_make_reconcile_check(spec, raw_asset) for spec, raw_asset in zip(TABLES, raw_assets)]
 
 
 @asset(

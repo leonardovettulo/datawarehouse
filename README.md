@@ -16,6 +16,7 @@ Then open:
 | Metabase | http://127.0.0.1:3000 | `admin@localhost.local` / `LocalDev123456` |
 | Dagster | http://127.0.0.1:3030 | No auth; local only |
 | ClickHouse HTTP | http://127.0.0.1:8123 | User `default`, password from `.env` |
+| Mailpit | http://127.0.0.1:8025 | Catches Dagster alert emails locally |
 
 Day to day after the first bootstrap:
 
@@ -24,6 +25,7 @@ make up                       # start without rebuilding
 make pipeline                 # queue extracts + marts and wait (no-op if no new source rows)
 make deploy                   # ship etl/ changes; waits for running jobs before restarting
 make verify
+make test                     # e2e tests on a throwaway stack; never touches dw-local
 make down
 ```
 
