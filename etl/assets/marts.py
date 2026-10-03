@@ -1,11 +1,15 @@
-"""Marts rebuilt from raw by truncate-and-reload (partition replacement comes later)."""
+"""Marts rebuilt from raw into a shadow table, then swapped in atomically.
+
+Readers (Metabase) see either the previous complete mart or the new one, never an
+empty or half-written table. A failed rebuild leaves the previous mart in place.
+"""
 
 from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
 
-from dagster import MaterializeResult, asset
+from dagster import Failure, MaterializeResult, asset
 
 from etl.assets.raw import raw_assets
 from etl.resources import ClickHouseResource
@@ -13,7 +17,7 @@ from etl.resources import ClickHouseResource
 RAW_DEPS = raw_assets
 
 EVENTO_DDL = """
-CREATE TABLE IF NOT EXISTS marts.insumo_evento
+CREATE TABLE {table}
 (
     evento_id String,
     trazabilidad_id String,
@@ -35,7 +39,7 @@ ORDER BY (insumo_codigo, fecha, stage, origen_id)
 """
 
 GAP_DDL = """
-CREATE TABLE IF NOT EXISTS marts.trazabilidad_gap
+CREATE TABLE {table}
 (
     insumo_codigo LowCardinality(String),
     insumo_nombre String,
@@ -56,7 +60,7 @@ ORDER BY (insumo_codigo, periodo)
 """
 
 INDICADOR_DDL = """
-CREATE TABLE IF NOT EXISTS marts.indicador_cobertura
+CREATE TABLE {table}
 (
     indicador LowCardinality(String),
     periodo Date,
@@ -75,7 +79,6 @@ ORDER BY (indicador, periodo)
 # only the current version of each id, otherwise an UPDATE at the source (or a
 # batch re-inserted after a failed watermark write) is counted twice.
 EVENTO_SQL = r"""
-INSERT INTO marts.insumo_evento
 SELECT
     concat('compra-', toString(id)) AS evento_id,
     concat(insumo_codigo, '-', formatDateTime(fecha, '%Y-%m')) AS trazabilidad_id,
@@ -142,7 +145,6 @@ FROM (SELECT * FROM raw.facturacion ORDER BY updated_at DESC, _ingested_at DESC 
 """
 
 GAP_SQL = """
-INSERT INTO marts.trazabilidad_gap
 SELECT
     insumo_codigo,
     insumo_nombre,
@@ -179,7 +181,6 @@ FROM
 """
 
 INDICADOR_SQL = """
-INSERT INTO marts.indicador_cobertura
 SELECT
     indicador,
     periodo,
@@ -211,6 +212,32 @@ FROM
 """
 
 
+def _pepper() -> str:
+    pepper = os.environ.get("PSEUDONYM_PEPPER", "")
+    if not pepper:
+        raise Failure("PSEUDONYM_PEPPER is not set; refusing to build marts with an unknown pseudonym key.")
+    return pepper
+
+
+def _rebuild(ch, name: str, ddl: str, select_sql: str, parameters: dict | None = None) -> int:
+    """Build marts.<name>__new from the current DDL, then swap it in atomically.
+
+    Creating the shadow table from the DDL in code (not `AS marts.<name>`) means a
+    schema change in this file takes effect on the next run.
+    """
+    target = f"marts.{name}"
+    shadow = f"marts.{name}__new"
+    ch.command(f"DROP TABLE IF EXISTS {shadow}")
+    ch.command(ddl.format(table=shadow))
+    ch.command(f"INSERT INTO {shadow}\n{select_sql}", parameters=parameters)
+    if int(ch.command(f"EXISTS TABLE {target}")):
+        ch.command(f"EXCHANGE TABLES {shadow} AND {target}")
+        ch.command(f"DROP TABLE {shadow}")
+    else:
+        ch.command(f"RENAME TABLE {shadow} TO {target}")
+    return int(ch.query(f"SELECT count() FROM {target}").result_rows[0][0])
+
+
 @asset(
     group_name="marts",
     compute_kind="clickhouse",
@@ -221,12 +248,9 @@ def marts_insumo_evento(
     context,
     clickhouse: ClickHouseResource,
 ) -> MaterializeResult:
-    ch = clickhouse.client()
-    pepper = os.environ.get("PSEUDONYM_PEPPER", "local-dev-pepper-not-for-prod")
-    ch.command(EVENTO_DDL)
-    ch.command("TRUNCATE TABLE IF EXISTS marts.insumo_evento")
-    ch.command(EVENTO_SQL, parameters={"pepper": pepper})
-    count = int(ch.query("SELECT count() FROM marts.insumo_evento").result_rows[0][0])
+    count = _rebuild(
+        clickhouse.client(), "insumo_evento", EVENTO_DDL, EVENTO_SQL, parameters={"pepper": _pepper()}
+    )
     context.log.info("marts.insumo_evento rows=%s", count)
     return MaterializeResult(metadata={"rows": count, "built_at": str(datetime.now(timezone.utc))})
 
@@ -241,11 +265,7 @@ def marts_trazabilidad_gap(
     context,
     clickhouse: ClickHouseResource,
 ) -> MaterializeResult:
-    ch = clickhouse.client()
-    ch.command(GAP_DDL)
-    ch.command("TRUNCATE TABLE IF EXISTS marts.trazabilidad_gap")
-    ch.command(GAP_SQL)
-    count = int(ch.query("SELECT count() FROM marts.trazabilidad_gap").result_rows[0][0])
+    count = _rebuild(clickhouse.client(), "trazabilidad_gap", GAP_DDL, GAP_SQL)
     context.log.info("marts.trazabilidad_gap rows=%s", count)
     return MaterializeResult(metadata={"rows": count})
 
@@ -260,10 +280,6 @@ def marts_indicador_cobertura(
     context,
     clickhouse: ClickHouseResource,
 ) -> MaterializeResult:
-    ch = clickhouse.client()
-    ch.command(INDICADOR_DDL)
-    ch.command("TRUNCATE TABLE IF EXISTS marts.indicador_cobertura")
-    ch.command(INDICADOR_SQL)
-    count = int(ch.query("SELECT count() FROM marts.indicador_cobertura").result_rows[0][0])
+    count = _rebuild(clickhouse.client(), "indicador_cobertura", INDICADOR_DDL, INDICADOR_SQL)
     context.log.info("marts.indicador_cobertura rows=%s", count)
     return MaterializeResult(metadata={"rows": count})

@@ -18,6 +18,7 @@ make bootstrap
 | Metabase | http://127.0.0.1:3000 | `MB_ADMIN_EMAIL` / `MB_ADMIN_PASSWORD` in `.env` |
 | Dagster | http://127.0.0.1:3030 | none |
 | ClickHouse HTTP | http://127.0.0.1:8123 | `default` / `CH_ADMIN_PASSWORD` |
+| Mailpit (alert emails) | http://127.0.0.1:8025 | none; local only |
 
 ClickHouse users inside the network:
 
@@ -59,6 +60,7 @@ make logs-platform     # postgres, clickhouse, metabase
 make logs-orch         # dagster
 make pipeline          # queue ingest_and_marts and wait for it
 make deploy            # ship etl/ changes without killing a running job
+make test              # e2e tests on a throwaway stack (dw-test), ~1 min
 make verify
 make reset             # docker compose down -v
 ```
