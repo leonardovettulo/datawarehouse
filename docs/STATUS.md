@@ -117,7 +117,7 @@ Legend:
 | ID | Item | Local | Prod | Notes |
 |---|---|---|---|---|
 | 8.1 | Disk > 80% alert | `local_done` | `not_started` | `dw-healthcheck` timer → heartbeat; also memory + containers |
-| 8.2 | Dagster failure email | `local_done` | `not_started` | `alert_on_run_failure`; Mailpit locally, SMTP relay in prod (open question 11) |
+| 8.2 | Dagster failure alert | `local_done` | `not_started` | `alert_on_run_failure` → Better Stack heartbeat `/fail` |
 | 8.6 | Nightly-did-not-succeed alert | `local_done` | `not_started` | `heartbeat_on_success` → `PIPELINE_HEARTBEAT_URL` |
 | 8.7 | E2E tests | `local_done` | `n/a_local` | `make test` on isolated `dw-test` stack |
 | 8.3 | Log-shipping lag alert | `n/a_local` | `not_started` | |

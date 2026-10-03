@@ -37,12 +37,6 @@ services:
       PG_SOURCE_PASSWORD: ${PG_SOURCE_PASSWORD:?}
       ARCHIVE_ROOT: /srv/dw/archive
       PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:?}
-      # Alerts go to Mailpit locally: http://127.0.0.1:8025
-      ALERT_SMTP_HOST: mailpit
-      ALERT_SMTP_PORT: "1025"
-      ALERT_SMTP_STARTTLS: "no"
-      ALERT_EMAIL_FROM: dagster@dw.local
-      ALERT_EMAIL_TO: data-team@dw.local
       PIPELINE_HEARTBEAT_URL: ${PIPELINE_HEARTBEAT_URL:-}
       DAGSTER_BASE_URL: http://127.0.0.1:3030
     volumes:

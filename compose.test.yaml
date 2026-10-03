@@ -11,9 +11,6 @@ services:
   metabase:
     ports: !reset []
 
-  mailpit:
-    ports: !reset []
-
   tests:
     build:
       context: .
