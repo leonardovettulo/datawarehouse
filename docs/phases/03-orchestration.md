@@ -13,21 +13,38 @@ Same image, two processes:
 - `dagster-webserver` → `127.0.0.1:3030`
 - `dagster-daemon` — schedules + queued run execution (runs execute **inside** this container)
 
-The local image copies `etl/`; code changes require `make up-build`.
-`workspace.yaml` loads `python_module: etl.definitions`.
+The image copies `etl/`, so new code means a new image and a restart of both
+processes. `workspace.yaml` loads `python_module: etl.definitions`.
 
 ## Deploy loop
 
 ```bash
 # local: code or dependencies changed
-make up-build
+make deploy
 make pipeline
 
 # production (platform must be up first)
-docker compose -f compose.prod.yaml --env-file .env up -d --build
+git pull
+scripts/deploy.sh prod
 ```
 
-Never restart while the nightly job is running.
+`scripts/deploy.sh`:
+
+1. Builds the new image while the old one keeps running.
+2. Runs `dagster definitions validate` in the new image; aborts if it fails.
+3. Waits until no run is in progress (`DEPLOY_WAIT_TIMEOUT`, default 1800 s).
+   On timeout it aborts and restarts nothing.
+4. Recreates `dagster-webserver` and `dagster-daemon` only. Queued runs survive
+   in Postgres and start afterwards.
+
+### Orphaned runs
+
+Runs execute as children of the daemon, so a daemon restart (reboot, OOM kill,
+`docker restart`) kills them while Postgres still says `STARTED`. With
+`max_concurrent_runs: 1` that would block the queue forever. The entrypoint runs
+`dagster_ops.py fail-orphans` before starting the daemon, marking those runs as
+failed. `run_monitoring.max_runtime_seconds` (6 h) in `dagster/dagster.yaml`
+fails runs that hang with a live process. Re-run a failed run from the UI.
 
 ## Driver
 

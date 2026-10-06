@@ -66,7 +66,8 @@ Legend:
 | 3.4 | pymssql / SQL Server driver | `not_started` | `not_started` | Local uses `psycopg` |
 | 3.5 | Daemon/webserver `mem_limit` | `n/a_local` | `not_started` | Defaults defined in prod compose; tune when RAM is known |
 | 3.6 | Prod Dagster compose: external network, archive, SQL Server contract | `n/a_local` | `not_started` | Config ready in root `compose.prod.yaml`; adapter still mock |
-| 3.7 | Prevent overlapping complete runs | `local_done` | `not_started` | `max_concurrent_runs: 1` |
+| 3.7 | Prevent overlapping complete runs | `local_done` | `not_started` | `max_concurrent_runs: 1`; `make pipeline` goes through the queue |
+| 3.8 | Deploy without killing runs; orphaned runs don't block the queue | `local_done` | `not_started` | `scripts/deploy.sh`, `fail-orphans` at daemon start, `run_monitoring` |
 
 ## Phase 4 — Ingestion into `raw`
 
@@ -74,7 +75,8 @@ Legend:
 |---|---|---|---|---|
 | 4.1 | Watermark in `raw.ingest_state` | `local_done` | `not_started` | |
 | 4.2 | Parquet first, then CH, then advance watermark | `local_done` | `not_started` | volume `archive_data` |
-| 4.3 | Chunked reads | `in_progress` | `not_started` | Seed is tiny; pattern is one SELECT |
+| 4.3 | Chunked reads | `local_done` | `not_started` | Server-side cursor, `EXTRACT_CHUNK_ROWS`; SQL Server adapter must keep `stream()` |
+| 4.8 | Source vs raw reconciliation | `local_done` | `not_started` | Blocking asset check `matches_source` per raw table |
 | 4.4 | Retry-safe around log-shipping kills | `not_started` | `not_started` | |
 | 4.5 | Hash-and-append for overwrite-in-place tables | `not_started` | `not_started` | Needs relevamiento |
 | 4.6 | MergeTree, monthly partitions, no ReplacingMergeTree in raw | `local_done` | `not_started` | |
@@ -96,7 +98,8 @@ Legend:
 | 6.1 | `marts.insumo_evento` | `local_done` | `not_started` | |
 | 6.2 | `marts.trazabilidad_gap` with `motivo` | `local_done` | `not_started` | |
 | 6.3 | `marts.indicador_*` with written definition | `local_done` | `not_started` | `indicador_cobertura` |
-| 6.4 | Rebuildable from raw, partition replace | `local_done` | `not_started` | Local: TRUNCATE + INSERT |
+| 6.4 | Rebuildable from raw, atomic replace | `local_done` | `not_started` | Shadow table + `EXCHANGE TABLES` |
+| 6.6 | Marts read the latest version per id from append-only raw | `local_done` | `not_started` | `LIMIT 1 BY id` on `updated_at`, `_ingested_at` |
 | 6.5 | Pseudonymize patient ids at marts boundary | `local_done` | `not_started` | SHA256 + pepper; confirm with Consejo |
 
 ## Phase 7 — Metabase, access, dashboards
@@ -113,10 +116,12 @@ Legend:
 
 | ID | Item | Local | Prod | Notes |
 |---|---|---|---|---|
-| 8.1 | Disk > 80% alert | `not_started` | `not_started` | |
-| 8.2 | Dagster failure email | `not_started` | `not_started` | |
+| 8.1 | Disk > 80% alert | `local_done` | `not_started` | `dw-healthcheck` timer → heartbeat; also memory + containers |
+| 8.2 | Dagster failure alert | `local_done` | `not_started` | `alert_on_run_failure` → Better Stack heartbeat `/fail` |
+| 8.6 | Nightly-did-not-succeed alert | `local_done` | `not_started` | `heartbeat_on_success` → `PIPELINE_HEARTBEAT_URL` |
+| 8.7 | E2E tests | `local_done` | `n/a_local` | `make test` on isolated `dw-test` stack |
 | 8.3 | Log-shipping lag alert | `n/a_local` | `not_started` | |
-| 8.4 | Backup-job-missed alert | `not_started` | `not_started` | |
+| 8.4 | Backup-job-missed alert | `not_started` | `not_started` | Use the same heartbeat pattern once 5.1 exists |
 | 8.5 | Runbook in git | `in_progress` | `not_started` | `docs/local.md` is the local runbook |
 
 ---

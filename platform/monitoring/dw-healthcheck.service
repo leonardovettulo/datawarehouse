@@ -1,0 +1,8 @@
+[Unit]
+Description=DW host health check (disk, memory, containers) -> heartbeat
+After=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dw-healthcheck

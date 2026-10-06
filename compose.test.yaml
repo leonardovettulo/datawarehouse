@@ -1,0 +1,47 @@
+# Isolated end-to-end test stack (make test). Merged with platform/compose.yaml
+# under project `dw-test`: its own network, volumes and no published ports, so it
+# never touches dw-local. Torn down with -v after every run.
+
+name: dw-test
+
+services:
+  clickhouse:
+    ports: !reset []
+
+  metabase:
+    ports: !reset []
+
+  tests:
+    build:
+      context: .
+      target: test
+    image: dw-orchestration:test
+    entrypoint: []
+    command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"]
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: dagster
+      CH_DAGSTER_PASSWORD: ${CH_DAGSTER_PASSWORD:?}
+      SOURCE_PG_HOST: postgres
+      SOURCE_PG_PORT: "5432"
+      SOURCE_PG_DB: source
+      SOURCE_PG_USER: source_reader
+      PG_SOURCE_PASSWORD: ${PG_SOURCE_PASSWORD:?}
+      # Superuser, only so tests can modify the seeded source (simulate UPDATEs).
+      SOURCE_PG_ADMIN_USER: ${POSTGRES_USER:-postgres}
+      SOURCE_PG_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:?}
+      ARCHIVE_ROOT: /tmp/archive
+      PSEUDONYM_PEPPER: test-pepper
+      # Small chunks so the seed (30–50 rows per table) exercises multi-chunk extracts.
+      EXTRACT_CHUNK_ROWS: "7"
+    networks: [dw_net]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+networks:
+  dw_net:
+    name: dw_test_net

@@ -15,4 +15,11 @@ echo "Postgres is ready."
 echo "Running Dagster instance migrations (no-op if already applied)..."
 dagster instance migrate
 
+# Runs execute as children of the daemon (DefaultRunLauncher), so any run still
+# marked in progress when the daemon starts died with the previous container.
+# Fail them, otherwise max_concurrent_runs: 1 blocks the queue forever.
+if [ "${1:-}" = "dagster-daemon" ]; then
+  python /opt/dagster/app/dagster_ops.py fail-orphans
+fi
+
 exec "$@"

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM python:3.11.13-slim@sha256:9bffe4353b925a1656688797ebc68f9c525e79b1d377a764d232182a519eeec4
+FROM python:3.11.13-slim@sha256:9bffe4353b925a1656688797ebc68f9c525e79b1d377a764d232182a519eeec4 AS app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
@@ -21,12 +21,20 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
-# Layer 2: swap in real pipeline code (overlaid by bind-mount in local compose)
+# Layer 2: pipeline code. Changes here need scripts/deploy.sh (make deploy).
 COPY etl ./etl
 
 COPY dagster/dagster.yaml "${DAGSTER_HOME}/dagster.yaml"
 COPY workspace.yaml ./workspace.yaml
+COPY scripts/dagster_ops.py ./dagster_ops.py
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+# Test image (make test): app + dev dependencies + tests/. Never deployed; compose
+# files build `target: app` explicitly because the last stage is the default.
+FROM app AS test
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
+COPY tests ./tests

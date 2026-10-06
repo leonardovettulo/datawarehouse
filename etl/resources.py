@@ -20,6 +20,18 @@ class SourceDBResource(ConfigurableResource):
             options="-c TimeZone=UTC",
         )
 
+    def stream(self, sql: str, params: tuple, chunk_rows: int):
+        """Yield lists of at most chunk_rows rows without loading the result in memory.
+
+        Uses a server-side cursor; the SQL Server adapter must keep this contract.
+        """
+        with self.connect() as conn:
+            with conn.cursor(name="dw_extract") as cur:
+                cur.itersize = chunk_rows
+                cur.execute(sql, params)
+                while rows := cur.fetchmany(chunk_rows):
+                    yield rows
+
 
 class ClickHouseResource(ConfigurableResource):
     host: str

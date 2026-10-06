@@ -1,11 +1,14 @@
 # Orchestration stack: redeployed often. Merged with platform/compose.yaml via `make up`.
-# Production: own project (`dw-orchestration`) on the external dw_net; bind-mount etl/.
+# Production: own project (`dw-orchestration`) on the external dw_net (compose.prod.yaml).
+# Code changes: scripts/deploy.sh (make deploy) — waits for running jobs, then restarts.
 
 name: dw-local
 
 services:
   dagster-webserver:
-    build: .
+    build:
+      context: .
+      target: app
     image: dw-orchestration:local
     restart: unless-stopped
     command:
@@ -34,6 +37,8 @@ services:
       PG_SOURCE_PASSWORD: ${PG_SOURCE_PASSWORD:?}
       ARCHIVE_ROOT: /srv/dw/archive
       PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:?}
+      PIPELINE_HEARTBEAT_URL: ${PIPELINE_HEARTBEAT_URL:-}
+      DAGSTER_BASE_URL: http://127.0.0.1:3030
     volumes:
       - archive_data:/srv/dw/archive
     networks: [dw_net]

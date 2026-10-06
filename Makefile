@@ -1,5 +1,5 @@
 .PHONY: data-dirs up up-build down build logs logs-platform logs-orch \
-	wait pipeline setup-metabase verify bootstrap reset shell migrate help
+	wait pipeline setup-metabase verify bootstrap reset shell migrate deploy test help
 
 COMPOSE := docker compose -p dw-local -f platform/compose.yaml -f compose.yaml --project-directory .
 export COMPOSE_PROJECT_NAME := dw-local
@@ -35,9 +35,18 @@ logs-orch: ## Follow Dagster webserver + daemon
 wait: ## Block until Dagster, Metabase, and ClickHouse answer
 	set -a && . ./.env && set +a && python3 scripts/wait_for_stack.py
 
-pipeline: ## Materialize source counts, raw extracts, and marts
-	$(COMPOSE) exec -T dagster-webserver \
-		dagster asset materialize -m etl.definitions --select '*'
+pipeline: ## Queue ingest_and_marts (respects max_concurrent_runs) and wait for it
+	$(COMPOSE) exec -T dagster-webserver python dagster_ops.py launch ingest_and_marts --wait
+
+deploy: ## Rebuild Dagster with new code; waits for running jobs before restarting
+	scripts/deploy.sh local
+
+TEST_COMPOSE := docker compose -p dw-test -f platform/compose.yaml -f compose.test.yaml --project-directory .
+
+test: ## End-to-end tests on a throwaway stack (project dw-test; never touches dw-local)
+	$(TEST_COMPOSE) build tests
+	$(TEST_COMPOSE) run --rm tests; status=$$?; \
+		$(TEST_COMPOSE) down -v --remove-orphans >/dev/null 2>&1; exit $$status
 
 setup-metabase: ## Idempotent Metabase admin + ClickHouse connection
 	set -a && . ./.env && set +a && python3 scripts/setup_metabase.py

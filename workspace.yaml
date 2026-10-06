@@ -1,2 +1,6 @@
 load_from:
-  - python_module: etl.definitions
+  - python_module:
+      module_name: etl.definitions
+      # Explicit so every entry point (webserver, daemon, `dagster definitions validate`)
+      # resolves `etl` the same way; the project itself is not pip-installed.
+      working_directory: /opt/dagster/app

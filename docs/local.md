@@ -39,14 +39,17 @@ Re-running `make pipeline` after a successful run inserts 0 raw rows (watermark 
 
 | Change | Action |
 |---|---|
-| Python under `etl/` | `make up-build` (image copy; no bind-mount on this Docker Desktop) |
-| `pyproject.toml` | `uv lock`, commit `uv.lock`, then `make up-build` |
-| Dockerfile | `make up-build` |
+| Python under `etl/` | `make deploy` (waits for running jobs, then restarts Dagster) |
+| `pyproject.toml` | `uv lock`, commit `uv.lock`, then `make deploy` |
+| Dockerfile | `make deploy` |
 | ClickHouse `config.d` or Postgres init | Init scripts run **only on an empty data dir**. `make reset && make bootstrap` |
 | `.env` secrets | `make down && make up` |
 | Prod host dirs | `sudo ./platform/prepare-host.sh` then `compose.prod.yaml` |
 
-Do not `git pull` + restart while a run is in progress.
+`make deploy` (`scripts/deploy.sh local`) builds and validates the new image first,
+then waits until no run is in progress before restarting webserver + daemon. If
+Dagster is restarted any other way mid-run, the daemon fails the orphaned run at
+startup so the queue keeps moving.
 
 ## Useful commands
 
@@ -54,7 +57,9 @@ Do not `git pull` + restart while a run is in progress.
 make logs              # everything
 make logs-platform     # postgres, clickhouse, metabase
 make logs-orch         # dagster
-make pipeline          # materialize '*'
+make pipeline          # queue ingest_and_marts and wait for it
+make deploy            # ship etl/ changes without killing a running job
+make test              # e2e tests on a throwaway stack (dw-test), ~1 min
 make verify
 make reset             # docker compose down -v
 ```
