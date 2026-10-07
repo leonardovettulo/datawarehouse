@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 import pytest
 from dagster import AssetCheckSeverity, DagsterInstance, DefaultScheduleStatus, Definitions, Failure
 
-from etl.assets.marts import _pepper
+from etl.assets.marts import paciente_ref_sql
 from etl.assets.raw import TABLES
 from etl.definitions import defs
 
@@ -89,10 +89,19 @@ def test_definitions_load():
         assert {"alert_on_run_failure", "heartbeat_on_success"} <= sensors
 
 
-def test_missing_pepper_fails(monkeypatch):
+def test_pseudonymize_off_by_default(monkeypatch):
+    monkeypatch.delenv("PSEUDONYMIZE", raising=False)
+    monkeypatch.delenv("PSEUDONYM_PEPPER", raising=False)
+    expr, params = paciente_ref_sql()
+    assert expr == "nro_historia"
+    assert params is None
+
+
+def test_pseudonymize_requires_pepper(monkeypatch):
+    monkeypatch.setenv("PSEUDONYMIZE", "1")
     monkeypatch.delenv("PSEUDONYM_PEPPER", raising=False)
     with pytest.raises(Failure):
-        _pepper()
+        paciente_ref_sql()
 
 
 # --- pipeline scenarios ----------------------------------------------------------

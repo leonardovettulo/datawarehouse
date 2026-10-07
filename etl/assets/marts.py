@@ -123,7 +123,7 @@ SELECT
     profesional,
     'hc_registros',
     id,
-    lower(hex(SHA256(concat(nro_historia, {pepper:String})))),
+    __PACIENTE_REF__,
     now64(6)
 FROM (SELECT * FROM raw.hc_registros ORDER BY updated_at DESC, _ingested_at DESC LIMIT 1 BY id)
 UNION ALL
@@ -212,11 +212,33 @@ FROM
 """
 
 
-def _pepper() -> str:
-    pepper = os.environ.get("PSEUDONYM_PEPPER", "")
+_HASHED_PACIENTE_REF = "lower(hex(SHA256(concat(nro_historia, {pepper:String}))))"
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def pseudonymize_enabled() -> bool:
+    return os.environ.get("PSEUDONYMIZE", "0").strip().lower() in _TRUTHY
+
+
+def paciente_ref_sql() -> tuple[str, dict | None]:
+    """Expression for marts.insumo_evento.paciente_ref.
+
+    Off by default: the chart number is copied through. Set PSEUDONYMIZE=1 and
+    PSEUDONYM_PEPPER to hash it at this boundary instead.
+    """
+    if not pseudonymize_enabled():
+        return "nro_historia", None
+    pepper = os.environ.get("PSEUDONYM_PEPPER", "").strip()
     if not pepper:
-        raise Failure("PSEUDONYM_PEPPER is not set; refusing to build marts with an unknown pseudonym key.")
-    return pepper
+        raise Failure(
+            "PSEUDONYMIZE is on but PSEUDONYM_PEPPER is not set; refusing to hash patient ids with an empty key."
+        )
+    return _HASHED_PACIENTE_REF, {"pepper": pepper}
+
+
+def _evento_sql() -> tuple[str, dict | None]:
+    expr, params = paciente_ref_sql()
+    return EVENTO_SQL.replace("__PACIENTE_REF__", expr), params
 
 
 def _rebuild(ch, name: str, ddl: str, select_sql: str, parameters: dict | None = None) -> int:
@@ -242,15 +264,14 @@ def _rebuild(ch, name: str, ddl: str, select_sql: str, parameters: dict | None =
     group_name="marts",
     compute_kind="clickhouse",
     deps=RAW_DEPS,
-    description="Normalized event chain: compra → entrega → HC → facturación. Patient ids hashed at this boundary.",
+    description="Normalized event chain: compra → entrega → HC → facturación. Patient id is nro_historia unless PSEUDONYMIZE=1.",
 )
 def marts_insumo_evento(
     context,
     clickhouse: ClickHouseResource,
 ) -> MaterializeResult:
-    count = _rebuild(
-        clickhouse.client(), "insumo_evento", EVENTO_DDL, EVENTO_SQL, parameters={"pepper": _pepper()}
-    )
+    sql, params = _evento_sql()
+    count = _rebuild(clickhouse.client(), "insumo_evento", EVENTO_DDL, sql, parameters=params)
     context.log.info("marts.insumo_evento rows=%s", count)
     return MaterializeResult(metadata={"rows": count, "built_at": str(datetime.now(timezone.utc))})
 

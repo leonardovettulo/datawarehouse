@@ -32,7 +32,7 @@ services:
       SOURCE_PG_ADMIN_USER: ${POSTGRES_USER:-postgres}
       SOURCE_PG_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:?}
       ARCHIVE_ROOT: /tmp/archive
-      PSEUDONYM_PEPPER: test-pepper
+      PSEUDONYMIZE: "0"
       # Small chunks so the seed (30–50 rows per table) exercises multi-chunk extracts.
       EXTRACT_CHUNK_ROWS: "7"
     networks: [dw_net]

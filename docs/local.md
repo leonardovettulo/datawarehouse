@@ -31,7 +31,7 @@ ClickHouse users inside the network:
 3. Inserts into ClickHouse `raw.*` with `_ingested_at` (UTC) and `_batch_id`.
 4. Advances `raw.ingest_state` only after both writes succeed.
 5. Rebuilds `marts.insumo_evento`, `marts.trazabilidad_gap`, `marts.indicador_cobertura`.
-6. Hashes `nro_historia` at the marts boundary (`PSEUDONYM_PEPPER`).
+6. Copies `nro_historia` into `paciente_ref`. Set `PSEUDONYMIZE=1` to hash it (`PSEUDONYM_PEPPER`).
 
 Re-running `make pipeline` after a successful run inserts 0 raw rows (watermark has caught up) and still rebuilds marts.
 

@@ -27,7 +27,7 @@ Legend:
 | 0.6 | LAN subnets for Metabase | `n/a_local` | `not_started` | |
 | 0.7 | Backup destination (NAS / second host) | `n/a_local` | `not_started` | |
 | 0.8 | Confidentiality / DPA / access approvals | `n/a_local` | `not_started` | Ley 25.326 |
-| 0.9 | Decision: patient identifiers on the tablero? | `n/a_local` | `not_started` | Local hashes `nro_historia` at marts |
+| 0.9 | Decision: patient identifiers on the tablero? | `n/a_local` | `not_started` | `PSEUDONYMIZE=0` copies `nro_historia`; `=1` hashes it |
 | 0.10 | Governance one-pager | `n/a_local` | `not_started` | Week 2 deliverable |
 | 0.11 | Table inventory spreadsheet | `in_progress` | `not_started` | Seeded 4 tables; real relevamiento still needed |
 
@@ -100,7 +100,7 @@ Legend:
 | 6.3 | `marts.indicador_*` with written definition | `local_done` | `not_started` | `indicador_cobertura` |
 | 6.4 | Rebuildable from raw, atomic replace | `local_done` | `not_started` | Shadow table + `EXCHANGE TABLES` |
 | 6.6 | Marts read the latest version per id from append-only raw | `local_done` | `not_started` | `LIMIT 1 BY id` on `updated_at`, `_ingested_at` |
-| 6.5 | Pseudonymize patient ids at marts boundary | `local_done` | `not_started` | SHA256 + pepper; confirm with Consejo |
+| 6.5 | Pseudonymize patient ids at marts boundary | `local_done` | `not_started` | Off by default (`PSEUDONYMIZE=0`); SHA256 + pepper when `=1` |
 
 ## Phase 7 — Metabase, access, dashboards
 

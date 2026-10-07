@@ -24,7 +24,7 @@ The seed is deliberately partial on HC and facturación so the first dashboard s
 
 ## Pseudonymization
 
-`nro_historia` is hashed with SHA256 + `PSEUDONYM_PEPPER` at the raw → marts boundary. If the variable is missing the mart build fails instead of using a default. Confirm with the Consejo before production. If the tablero does not need identity, Metabase then sits outside the sensitive-data perimeter.
+Off by default (`PSEUDONYMIZE=0`): `marts.insumo_evento.paciente_ref` is `nro_historia` as stored in `raw`. Set `PSEUDONYMIZE=1` and `PSEUDONYM_PEPPER` to store SHA256(chart number + pepper) instead. With the flag on, a missing pepper fails the mart build rather than hashing with an empty key.
 
 ## How to check
 

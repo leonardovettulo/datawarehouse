@@ -33,7 +33,8 @@ services:
       CLICKHOUSE_USER: dagster
       CH_DAGSTER_PASSWORD: ${CH_DAGSTER_PASSWORD:?}
       ARCHIVE_ROOT: /srv/dw/archive
-      PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:?}
+      PSEUDONYMIZE: ${PSEUDONYMIZE:-0}
+      PSEUDONYM_PEPPER: ${PSEUDONYM_PEPPER:-}
       EXTRACT_CHUNK_ROWS: ${EXTRACT_CHUNK_ROWS:-50000}
 
       # Alerts (etl/alerts.py): Better Stack heartbeat. Empty disables alerting.
